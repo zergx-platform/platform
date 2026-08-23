@@ -338,3 +338,58 @@ func TestForkRepoSameRepoOnly(t *testing.T) {
 
 var _ = chi.URLParam
 var _ = url.Values{}
+
+func TestInvalidComponentsRejectedFast(t *testing.T) {
+	fb := newFakeBackends()
+	defer fb.Close()
+	h := fb.api(t)
+
+	// (method, path, body, offender field)
+	cases := []struct {
+		method, path, body string
+	}{
+		{"POST", "/sessions", `{"org":"a:b","repo":"ok","branch":"main"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"x..y","branch":"main"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"ok","branch":"-lead"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"ok","branch":"name.lock"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"ok","branch":"trailing."}`},
+		{"POST", "/sessions/acme:api:main/fork", `{"branch":"bad:name"}`},
+		{"POST", "/repos/ensure-org", `{"org":"sp ace"}`},
+		{"POST", "/repos/ensure", `{"org":"ok","repo":"a/b"}`},
+		{"POST", "/repos/clone", `{"org":"ok","repo":"中文","git_url":"https://x"}`},
+		{"POST", "/repos/fork", `{"source_org":"ok","source_repo":"a","source_branch":"main","target_org":"ok","target_repo":"a","target_branch":"x:y"}`},
+	}
+	for i, c := range cases {
+		code, v := do(t, h, c.method, c.path, c.body)
+		if code != 400 {
+			t.Fatalf("case %d (%s %s): expected 400, got %d %v", i, c.method, c.path, code, v)
+		}
+		if msg, _ := v["error"].(string); !strings.Contains(msg, "invalid") {
+			t.Fatalf("case %d: error should name the offender: %v", i, v)
+		}
+	}
+
+	// valid components still pass through
+	code, _ := do(t, h, "POST", "/sessions", `{"org":"acme","repo":"my.repo","branch":"feat-1.2"}`)
+	if code != 200 {
+		t.Fatalf("valid dotted components should pass, got %d", code)
+	}
+}
+
+func TestValidComponentRules(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"main", true}, {"my.repo", true}, {"v1.2", true}, {"feat-x", true},
+		{"a", true}, {"", false}, {"-lead", false}, {"has:colon", false},
+		{"dot..dot", false}, {"trail.", false}, {"name.lock", false},
+		{"sp ace", false}, {"slash/es", false},
+		{strings.Repeat("a", 128), true}, {strings.Repeat("a", 129), false},
+	}
+	for _, c := range cases {
+		if got := validComponent(c.in); got != c.want {
+			t.Errorf("validComponent(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}

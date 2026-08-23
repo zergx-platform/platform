@@ -373,6 +373,12 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org/repo/branch required")
 		return
 	}
+	if bad, ok := requireComponents(
+		[2]string{"org", b.Org}, [2]string{"repo", b.Repo}, [2]string{"branch", b.Branch},
+	); !ok {
+		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
+		return
+	}
 	name := b.Org + ":" + b.Repo + ":" + b.Branch
 	body := map[string]interface{}{"name": name}
 	if b.Model != "" {
@@ -398,6 +404,10 @@ func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Branch == "" {
 		writeErr(w, http.StatusBadRequest, "branch required")
+		return
+	}
+	if bad, ok := requireComponents([2]string{"branch", b.Branch}); !ok {
+		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
 	org, repo, _, ok := parseTriple(id)
@@ -683,6 +693,10 @@ func (a *API) ensureOrg(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org required")
 		return
 	}
+	if bad, ok := requireComponents([2]string{"org", b.Org}); !ok {
+		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
+		return
+	}
 	var res map[string]interface{}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/ensure-org", b, nil, &res); err != nil {
 		badGateway(w, "jj-server", err)
@@ -700,6 +714,12 @@ func (a *API) ensureRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Org == "" || b.Repo == "" {
 		writeErr(w, http.StatusBadRequest, "org/repo required")
+		return
+	}
+	if bad, ok := requireComponents(
+		[2]string{"org", b.Org}, [2]string{"repo", b.Repo},
+	); !ok {
+		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/ensure", b, nil, nil); err != nil {
@@ -723,6 +743,12 @@ func (a *API) cloneRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Org == "" || b.Repo == "" || b.GitURL == "" {
 		writeErr(w, http.StatusBadRequest, "org/repo/git_url required")
+		return
+	}
+	if bad, ok := requireComponents(
+		[2]string{"org", b.Org}, [2]string{"repo", b.Repo},
+	); !ok {
+		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/clone", b, nil, nil); err != nil {
@@ -755,6 +781,14 @@ func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.TargetBranch == "" {
 		b.TargetBranch = b.SourceBranch
+	}
+	if bad, ok := requireComponents(
+		[2]string{"source_org", b.SourceOrg}, [2]string{"source_repo", b.SourceRepo},
+		[2]string{"target_org", b.TargetOrg}, [2]string{"target_repo", b.TargetRepo},
+		[2]string{"source_branch", b.SourceBranch}, [2]string{"target_branch", b.TargetBranch},
+	); !ok {
+		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
+		return
 	}
 	if b.SourceOrg != b.TargetOrg || b.SourceRepo != b.TargetRepo {
 		writeErr(w, http.StatusBadRequest, "cross-repo fork is not supported; fork within the same repo (branch-level)")
