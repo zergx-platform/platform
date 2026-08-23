@@ -91,13 +91,15 @@ type Upstreams struct {
 }
 
 func FromEnv(env func(string) string) *Upstreams {
+	// or returns the first non-empty env hit; the LAST argument is the
+	// fallback when no env var is set.
 	or := func(keys ...string) string {
-		for _, k := range keys {
+		for _, k := range keys[:len(keys)-1] {
 			if v := env(k); v != "" {
 				return v
 			}
 		}
-		return ""
+		return keys[len(keys)-1]
 	}
 	return &Upstreams{
 		// Prefer the gateway-specific names; fall back to the chart's
