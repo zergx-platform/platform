@@ -68,7 +68,11 @@ func newFakeBackends() *fakeBackends {
 	mux.HandleFunc("/api/v1/repos/acme/api/main/contents/hello.txt", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"content":"aGVsbG8gd29ybGQ=","encoding":"base64","sha":"x","size":11}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/main/log", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/repos/acme/api/log", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("rev") != "main" {
+			http.NotFound(w, r)
+			return
+		}
 		_, _ = w.Write([]byte(`{"commits":[
 			{"change_id":"c2","commit_id":"k2","author":"rucoder","timestamp":"2026-01-02","message":"edit hello"},
 			{"change_id":"c1","commit_id":"k1","author":"rucoder","timestamp":"2026-01-01","message":"write hello"},

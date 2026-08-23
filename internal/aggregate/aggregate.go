@@ -483,7 +483,7 @@ func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 			Message   string `json:"message"`
 		} `json:"commits"`
 	}
-	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos/"+org+"/"+repo+"/"+bm+"/log", nil, upstream.Q("limit", "100"), &log); err != nil {
+	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos/"+org+"/"+repo+"/log", nil, upstream.Q("limit", "100", "rev", bm), &log); err != nil {
 		badGateway(w, "jj-server", err)
 		return
 	}
