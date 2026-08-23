@@ -32,6 +32,7 @@ func Router(a *API) http.Handler {
 	r.Get("/sessions", a.listSessions)
 	r.Post("/sessions", a.createSession)
 	r.Post("/sessions/{id}/prompt", a.sessionPrompt)
+	r.Get("/sessions/{id}/messages", a.listMessages)
 	r.Get("/sessions/{id}/changes", a.sessionChanges)
 	r.Get("/sessions/{id}/todos", a.sessionTodos)
 	r.Post("/sessions/{id}/fork", a.forkSession)
