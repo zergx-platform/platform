@@ -31,7 +31,7 @@ func Router(a *API) http.Handler {
 	r.Post("/repos/{org}/{repo}/bookmarks/{bm}/session", a.adoptSession)
 	r.Get("/sessions", a.listSessions)
 	r.Post("/sessions", a.createSession)
-	r.Get("/sessions/{id}/messages", a.listMessages)
+	r.Post("/sessions/{id}/prompt", a.sessionPrompt)
 	r.Get("/sessions/{id}/changes", a.sessionChanges)
 	r.Get("/sessions/{id}/todos", a.sessionTodos)
 	r.Post("/sessions/{id}/fork", a.forkSession)
@@ -435,6 +435,41 @@ func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"session": recSession(map[string]interface{}{"name": name})})
+}
+
+// sessionPrompt forwards the prompt and synthesizes {ok, messageId}: the
+// agent only replies {ok}; the UI needs the id to swap its optimistic
+// pending user message.
+func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var b struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Prompt == "" {
+		writeErr(w, http.StatusBadRequest, "prompt required")
+		return
+	}
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, "/api/v1/sessions/"+id+"/prompt", b, nil, nil); err != nil {
+		badGateway(w, "agent", err)
+		return
+	}
+	// The user message is the chain tip after the turn enqueues; read it
+	// back so the UI can anchor its optimistic bubble.
+	var msgs struct {
+		Messages []struct {
+			ID   string `json:"id"`
+			Role string `json:"role"`
+		} `json:"messages"`
+	}
+	messageId := ""
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, "/api/v1/sessions/"+id+"/messages", nil, upstream.Q("limit", "1"), &msgs); err == nil {
+		for _, m := range msgs.Messages {
+			if m.Role == "user" {
+				messageId = m.ID
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "messageId": messageId})
 }
 
 // listMessages adapts agent message rows into the UI Message shape with

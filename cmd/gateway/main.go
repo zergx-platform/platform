@@ -140,7 +140,7 @@ func ownedByAggregate(path string) bool {
 	// /api/v1/sessions/{id}/{action}: id may itself contain ':' but not '/'
 	if strings.HasPrefix(path, "/api/v1/sessions/") {
 		sub := strings.TrimPrefix(path, "/api/v1/sessions/")
-		for _, action := range []string{"messages", "changes", "todos", "fork"} {
+		for _, action := range []string{"messages", "changes", "todos", "fork", "prompt"} {
 			if strings.HasSuffix(sub, "/"+action) {
 				return true
 			}
