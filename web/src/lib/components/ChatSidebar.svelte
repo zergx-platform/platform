@@ -49,6 +49,29 @@ interface ConfirmState {
 }
 let confirm = $state<ConfirmState | null>(null)
 let confirmBusy = $state(false)
+let adopting = $state<string | null>(null)
+let adoptError = $state('')
+
+async function openBookmark(org: string, repo: string, branch: string, sessionId: string | null) {
+  if (sessionId) {
+    store.pickSession(sessionId)
+    return
+  }
+  // Unbound (orphan) bookmark: adopt it — repo-extension creates the
+  // workspace session and binds it — then open the chat.
+  const key = `${org}/${repo}/${branch}`
+  if (adopting) return
+  adopting = key
+  adoptError = ''
+  const r = await api.repos.adoptSession(org, repo, branch)
+  adopting = null
+  if (r.isErr()) {
+    adoptError = `${key}: ${r.error}`
+    return
+  }
+  await Promise.all([store.refreshRepos(), store.refreshSessions()])
+  store.pickSession(r.value.session_name)
+}
 
 async function runConfirm() {
   if (!confirm) return
@@ -127,6 +150,12 @@ function deleteOrg(org: string, e: Event) {
         </Button>
     </div>
 
+    {#if adoptError}
+        <div class="mx-2 my-1 rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-[10px] text-destructive flex items-start gap-1">
+            <span class="flex-1 break-all">{adoptError}</span>
+            <button class="shrink-0 font-medium" onclick={() => (adoptError = '')}>✕</button>
+        </div>
+    {/if}
     <div class="flex-1 overflow-y-auto px-2 py-1">
         <!-- Recent sessions: flat list (org/repo/branch), expanded by default -->
         {#if recentSessions.length > 0}
@@ -143,7 +172,11 @@ function deleteOrg(org: string, e: Event) {
                     >
                         <Clock class="size-3 text-muted-foreground shrink-0" />
                         <span class={cn("text-[11px] flex-1 truncate", isActive && "font-medium")}>
-                            <span class="font-mono text-muted-foreground">{s.org}/</span>{s.repo}<span class="text-muted-foreground">/{s.branch}</span>
+                            {#if s.org}
+                                <span class="font-mono text-muted-foreground">{s.org}/</span>{s.repo}<span class="text-muted-foreground">/{s.branch}</span>
+                            {:else}
+                                <span class="font-mono">{s.id}</span>
+                            {/if}
                         </span>
                         {#if (s.unread ?? 0) > 0 && !isActive}
                             <span class="min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center shrink-0 font-medium">{s.unread}</span>
@@ -210,14 +243,14 @@ function deleteOrg(org: string, e: Event) {
                                                     {@const isActive = session && store.activeSessionId === session.session_id}
                                                     <div
                                                         class={cn("flex items-center gap-1 rounded px-1 py-0.5 cursor-pointer hover:bg-accent group", isActive && "bg-accent")}
-                                                        onclick={() => { if (session) store.pickSession(session.session_id) }}
-                                                        onkeydown={(e) => { if (e.key === "Enter" && session) store.pickSession(session.session_id) }}
+                                                        onclick={() => { if (adopting === `${orgNode.org}/${repoNode.repo}/${bm.branch}`) return; void openBookmark(orgNode.org, repoNode.repo, bm.branch, session ? session.session_id : null) }}
+                                                        onkeydown={(e) => { if (e.key === "Enter" && adopting !== `${orgNode.org}/${repoNode.repo}/${bm.branch}`) void openBookmark(orgNode.org, repoNode.repo, bm.branch, session ? session.session_id : null) }}
                                                         role="button"
                                                         tabindex="0"
                                                     >
-                                                        <span class={cn("inline-block h-2 w-2 rounded-full shrink-0", isActive ? "bg-green-500" : "bg-green-500")}></span>
-                                                        <span class={cn("text-[11px] flex-1 truncate", isActive && "font-medium")}>
-                                                            {bm.branch}
+                                                        <span class={cn("inline-block h-2 w-2 rounded-full shrink-0", session ? "bg-green-500" : "bg-muted-foreground/40")}></span>
+                                                        <span class={cn("text-[11px] flex-1 truncate", isActive && "font-medium", !session && "text-muted-foreground")}>
+                                                            {adopting === `${orgNode.org}/${repoNode.repo}/${bm.branch}` ? `${bm.branch}…` : bm.branch}
                                                         </span>
                                                         {#if session}
                                                             <button class="rounded p-0.5 text-muted-foreground hover:text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shrink-0"

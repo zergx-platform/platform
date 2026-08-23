@@ -51,6 +51,12 @@ export const repos = {
       params,
       z.object({ session: SessionSchema }),
     ).map(r => r.session),
+  adoptSession: (org: string, repo: string, bookmark: string) =>
+    post(
+      `/api/v1/repos/${org}/${repo}/bookmarks/${encodeURIComponent(bookmark)}/session`,
+      undefined,
+      z.object({ ok: z.boolean(), session_name: z.string(), adopted: z.boolean().optional() }),
+    ),
   ensureOrg: (org: string) =>
     post(
       `/api/v1/repos/ensure-org`,

@@ -134,6 +134,9 @@ func ownedByAggregate(path string) bool {
 	if strings.HasPrefix(path, "/api/v1/packages/") {
 		return true // {type}/{name}/versions | {type}/{name} deletes
 	}
+	if strings.HasPrefix(path, "/api/v1/repos/") && strings.HasSuffix(path, "/session") {
+		return true // bookmark adoption (repo-extension)
+	}
 	// /api/v1/sessions/{id}/{action}: id may itself contain ':' but not '/'
 	if strings.HasPrefix(path, "/api/v1/sessions/") {
 		sub := strings.TrimPrefix(path, "/api/v1/sessions/")

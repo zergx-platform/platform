@@ -28,6 +28,7 @@ func Router(a *API) http.Handler {
 	r.Post("/repos/ensure-org", a.ensureOrg)
 	r.Post("/repos/clone", a.cloneRepo)
 	r.Post("/repos/fork", a.forkRepo)
+	r.Post("/repos/{org}/{repo}/bookmarks/{bm}/session", a.adoptSession)
 	r.Get("/sessions", a.listSessions)
 	r.Post("/sessions", a.createSession)
 	r.Get("/sessions/{id}/messages", a.listMessages)
@@ -338,6 +339,19 @@ func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 		orgs = append(orgs, map[string]interface{}{"org": o.Org, "repos": repos})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"orgs": orgs})
+}
+
+// adoptSession: clicking an unbound bookmark in the UI binds it to a
+// (created) workspace session via repo-extension's adoption endpoint.
+func (a *API) adoptSession(w http.ResponseWriter, r *http.Request) {
+	org, repo, bm := chi.URLParam(r, "org"), chi.URLParam(r, "repo"), chi.URLParam(r, "bm")
+	path := "/api/v1/repos/" + org + "/" + repo + "/bookmarks/" + bm + "/session"
+	var res map[string]interface{}
+	if err := a.Up.RepoExt.JSON(r.Context(), http.MethodPost, path, nil, nil, &res); err != nil {
+		badGateway(w, "repo-extension", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // ---- sessions ----
