@@ -458,11 +458,14 @@ export function createMessages(sessionId: () => string) {
     r.match(
       data => {
         // swap the optimistic pending user message id for the real one
-        messages = messages.map(m =>
-          m.status === 'pending' && m.role === 'user'
-            ? { ...m, id: data.messageId, status: 'complete' as const }
-            : m,
-        )
+        // (guard: an empty messageId must not collapse two rows onto one id)
+        if (data.messageId) {
+          messages = messages.map(m =>
+            m.status === 'pending' && m.role === 'user'
+              ? { ...m, id: data.messageId, status: 'complete' as const }
+              : m,
+          )
+        }
       },
       err => {
         addErrorMessage(typeof err === 'string' ? err : 'Send failed')

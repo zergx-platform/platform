@@ -462,10 +462,12 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 		} `json:"messages"`
 	}
 	messageId := ""
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, "/api/v1/sessions/"+id+"/messages", nil, upstream.Q("limit", "1"), &msgs); err == nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, "/api/v1/sessions/"+id+"/messages", nil, upstream.Q("limit", "10"), &msgs); err == nil {
+		// messages come newest-first; the first user row is this prompt
 		for _, m := range msgs.Messages {
 			if m.Role == "user" {
 				messageId = m.ID
+				break
 			}
 		}
 	}
