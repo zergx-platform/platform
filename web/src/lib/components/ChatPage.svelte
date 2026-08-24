@@ -14,6 +14,7 @@ import {
   Folder,
   GitCommit,
   Inbox,
+  Layers,
   ListTodo,
   MoreVertical,
   RotateCcw,
@@ -384,6 +385,24 @@ async function undo(messageId: string) {
   if (!msgHook) return
   await msgHook.revert(messageId)
 }
+
+async function compact() {
+  const sid = store.activeSessionId
+  if (!sid) return
+  const r = await api.sessions.compact(sid)
+  r.match(
+    () => {
+      // Recreate the message hook so it re-fetches history with the new
+      // compaction checkpoint.
+      const hook = createMessages(() => store.activeSessionId ?? sid)
+      hook.init().then(cleanup => {
+        msgHook = hook
+        ;(hook as unknown as { _cleanup?: () => void })._cleanup = cleanup
+      })
+    },
+    () => {},
+  )
+}
 </script>
 
 <div class="flex flex-col h-full">
@@ -419,6 +438,10 @@ async function undo(messageId: string) {
                 <DropdownMenu.Item onclick={() => (showSettings = true)}>
                     <Settings class="size-4" />
                     Session settings
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onclick={() => compact()}>
+                    <Layers class="size-4" />
+                    Compact history
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator />
                 <DropdownMenu.Item onclick={() => (store.openOverlay('timeline'))}>

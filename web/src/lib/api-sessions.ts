@@ -105,6 +105,12 @@ export const sessions = {
       undefined,
       z.object({ interrupted: z.boolean() }),
     ),
+  compact: (id: string) =>
+    post(
+      `/api/v1/sessions/${encodeURIComponent(id)}/compact`,
+      undefined,
+      z.object({ ok: z.boolean() }),
+    ),
   fork: (id: string, branch: string) =>
     post(
       `/api/v1/sessions/${encodeURIComponent(id)}/fork`,
@@ -171,6 +177,13 @@ export const sessions = {
 
 export function flatToMessage(m: FlatMessage): Message {
   const id = m.id || m.created_at || uid()
+  if (m.role === 'compaction') {
+    return {
+      id,
+      role: 'compaction' as const,
+      parts: [{ type: 'compaction', text: m.content }],
+    }
+  }
   if (m.role === 'tool' || m.tool_name) {
     return {
       id,

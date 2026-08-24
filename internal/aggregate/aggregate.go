@@ -33,6 +33,7 @@ func Router(a *API) http.Handler {
 	r.Post("/sessions", a.createSession)
 	r.Post("/sessions/{id}/prompt", a.sessionPrompt)
 	r.Get("/sessions/{id}/messages", a.listMessages)
+	r.Post("/sessions/{id}/compact", a.compactSession)
 	r.Get("/sessions/{id}/changes", a.sessionChanges)
 	r.Get("/sessions/{id}/todos", a.sessionTodos)
 	r.Post("/sessions/{id}/fork", a.forkSession)
@@ -436,6 +437,19 @@ func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"session": recSession(map[string]interface{}{"name": name})})
 }
 
+// compactSession forwards a manual compaction request to the agent.
+func (a *API) compactSession(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var res struct {
+		OK bool `json:"ok"`
+	}
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, "/api/v1/sessions/"+id+"/compact", nil, nil, &res); err != nil {
+		badGateway(w, "agent", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": res.OK})
+}
+
 // sessionPrompt forwards the prompt and synthesizes {ok, messageId}: the
 // agent only replies {ok}; the UI needs the id to swap its optimistic
 // pending user message.
@@ -494,7 +508,12 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 	out := []map[string]interface{}{}
 	for _, m := range res.Messages {
 		var parts []map[string]interface{}
-		if m.ToolName != "" {
+		if m.Role == "compaction" {
+			parts = []map[string]interface{}{{
+				"type": "compaction",
+				"text": m.Content,
+			}}
+		} else if m.ToolName != "" {
 			parts = []map[string]interface{}{{
 				"type": "tool",
 				"tool": m.ToolName,

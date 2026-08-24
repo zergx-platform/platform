@@ -10,7 +10,7 @@ export interface ChatPart extends MessagePart {
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant' | 'tool' | 'system' | 'error'
+  role: 'user' | 'assistant' | 'tool' | 'system' | 'error' | 'compaction'
   status: MsgStatus
   parts: ChatPart[]
   createdAt?: string

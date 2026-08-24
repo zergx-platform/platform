@@ -57,7 +57,12 @@ function handleCopy() {
                 {:else if part.type === "tool" && part.state}
                     <ToolPartView {part} {isStreaming} {onOpenChange} />
                 {:else if part.type === "compaction"}
-                    <div class="text-xs text-muted-foreground italic">[Context compacted]</div>
+                    <details class="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+                        <summary class="cursor-pointer select-none text-muted-foreground">
+                            <span class="inline-flex items-center gap-1.5">历史已压缩 · 查看摘要</span>
+                        </summary>
+                        <pre class="mt-2 whitespace-pre-wrap font-sans text-foreground">{part.text ?? ""}</pre>
+                    </details>
                 {/if}
             {/each}
         {/if}
