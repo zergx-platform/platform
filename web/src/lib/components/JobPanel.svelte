@@ -1,17 +1,11 @@
 <script lang="ts">
 import { ChevronRight, Eye, RefreshCw, Square, X } from '@lucide/svelte'
-import { WorkerEventSchema } from '@recoder-neo/schema'
 import { onDestroy, onMount } from 'svelte'
-import { z } from 'zod'
 import type { JobInfo } from '$lib/api'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'
 import ConfirmDialog from './ConfirmDialog.svelte'
 
-const EventFromStringSchema = z.preprocess(
-  v => (typeof v === 'string' ? JSON.parse(v) : v),
-  WorkerEventSchema,
-)
 
 let {
   containerId = '',
@@ -26,7 +20,6 @@ let {
 } = $props()
 
 let jobs = $state<JobInfo[]>([])
-let eventSource: EventSource | null = null
 
 // Output modal state
 let modalJob = $state<JobInfo | null>(null)
@@ -178,31 +171,9 @@ function filteredLines(jid: string, stream: string): string[] {
 
 onMount(() => {
   pollJobs()
-  const path = `/api/v1/containers/${containerId}/events`
-  eventSource = new EventSource(path)
-  eventSource.onmessage = e => {
-    try {
-      const parsed = EventFromStringSchema.safeParse(e.data)
-      if (!parsed.success) return
-      const msg = parsed.data
-      if (msg.event === 'job.completed') {
-        const p = z
-          .object({ job_id: z.string(), exit_code: z.number() })
-          .safeParse(msg.params)
-        if (!p.success) return
-        const exit = p.data.exit_code
-        jobs = jobs.map(j =>
-          j.id === p.data.job_id
-            ? { ...j, state: exit === 0 ? 'done' : 'failed', exit_code: exit }
-            : j,
-        )
-      }
-    } catch {}
-  }
 })
 
 onDestroy(() => {
-  eventSource?.close()
   for (const pid of modalPollers.values()) clearInterval(pid)
 })
 

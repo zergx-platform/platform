@@ -44,14 +44,11 @@ func main() {
 		pair{"/git", up.Repo.Base},
 		// repo-extension ops surface
 		pair{"/api/v1/session-map", up.RepoExt.Base},
-		// ops-extension (containers subpaths beyond the adapted list/create,
-		// sandbox, deploy, infra, images)
-		pair{"/api/v1/containers", up.Ops.Base},
-		pair{"/api/v1/sandbox", up.Ops.Base},
-		pair{"/api/v1/deploy", up.Ops.Base},
+		// ops-extension (sandboxes + deployments + infra + images)
+		pair{"/api/v1/sandboxes", up.Ops.Base},
+		pair{"/api/v1/deployments", up.Ops.Base},
 		pair{"/api/v1/infra", up.Ops.Base},
 		pair{"/api/v1/images", up.Ops.Base},
-		pair{"/api/v1/podman", up.Ops.Base},
 		// artifact (packages + OCI)
 		pair{"/api/v1/packages", up.Artifact.Base},
 		pair{"/v2", up.Artifact.Base},
@@ -124,7 +121,7 @@ func ownedByAggregate(path string) bool {
 		"/api/v1/repos", "/api/v1/repos/ensure", "/api/v1/repos/ensure-org",
 		"/api/v1/repos/clone", "/api/v1/repos/fork",
 		"/api/v1/sessions", "/api/v1/fs/list", "/api/v1/fs/read",
-		"/api/v1/containers", "/api/v1/packages", "/api/v1/packages/list",
+		"/api/v1/packages", "/api/v1/packages/list",
 	}
 	for _, e := range exact {
 		if path == e {

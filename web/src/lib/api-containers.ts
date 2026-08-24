@@ -1,5 +1,10 @@
+import { z } from 'zod'
+import { ResultAsync } from 'neverthrow'
+import { del, get, post } from './api-core'
+import { qs } from './client'
 import {
-  ContainerInfoSchema,
+  SandboxSchema,
+  DeploymentSchema,
   ExecResultSchema,
   JobInfoSchema,
   OciCatalogSchema,
@@ -7,48 +12,41 @@ import {
   PackageVersionsResponseSchema,
   RecoreConfigSchema,
 } from '@recoder-neo/schema'
-import { ResultAsync } from 'neverthrow'
-import { z } from 'zod'
-import { del, get, post } from './api-core'
-import { qs } from './client'
 
 export const containers = {
+  /** Session sandboxes from ops-extension. */
   list: () =>
     get(
-      `/api/v1/containers`,
-      z.object({ containers: z.array(ContainerInfoSchema) }),
-    ).map(r => r.containers),
-  create: (opts?: {
-    image?: string
-    session_id?: string
-    org?: string
-    repo?: string
-    branch?: string
-  }) =>
-    post(
-      `/api/v1/containers`,
-      opts ?? {},
-      z.object({ container: ContainerInfoSchema }),
-    ).map(r => r.container),
-  destroy: (cid: string) =>
-    del(`/api/v1/containers/${cid}`),
-  jobs: (cid: string) =>
+      `/api/v1/sandboxes`,
+      z.object({ sandboxes: z.array(SandboxSchema) }),
+    ).map(r => r.sandboxes),
+
+  /** Deployments owned by ops-extension. */
+  deployments: () =>
     get(
-      `/api/v1/containers/${cid}/jobs`,
-      z.object({ jobs: z.array(JobInfoSchema) }),
-    ).map(r => r.jobs || []),
-  exec: (cid: string, command: string, timeoutMs?: number) =>
+      `/api/v1/deployments`,
+      z.object({ deployments: z.array(DeploymentSchema) }),
+    ).map(r => r.deployments),
+
+  destroySandbox: (session: string) => del(`/api/v1/sandboxes/${session}`),
+  destroyDeployment: (name: string) => del(`/api/v1/deployments/${encodeURIComponent(name)}`),
+
+  jobs: (session: string) =>
+    get(
+      `/api/v1/sandboxes/${session}/jobs`,
+      z.object({ jobs: z.object({ jobs: z.array(JobInfoSchema) }) }),
+    ).map(r => r.jobs?.jobs ?? []),
+
+  exec: (session: string, command: string, timeoutMs?: number) =>
     post(
-      `/api/v1/containers/${cid}/exec`,
-      {
-        command,
-        timeout_ms: timeoutMs ?? 120000,
-      },
+      `/api/v1/sandboxes/${session}/exec`,
+      { command },
       ExecResultSchema,
     ),
-  kill: (cid: string, jobId: string) =>
+
+  kill: (session: string, jobId: string) =>
     post(
-      `/api/v1/containers/${cid}/kill/${jobId}`,
+      `/api/v1/sandboxes/${session}/jobs/${encodeURI(jobId)}/kill`,
       undefined,
       z.object({
         ok: z.boolean(),
@@ -56,15 +54,16 @@ export const containers = {
         error: z.string().optional(),
       }),
     ),
+
   jobOutput: (
-    cid: string,
+    session: string,
     jobId: string,
     stream: string,
     start: number,
     end: number,
   ) =>
     get(
-      `/api/v1/containers/${cid}/jobs/${jobId}/output${qs({ stream, start, end })}`,
+      `/api/v1/sandboxes/${session}/jobs/${encodeURI(jobId)}/output${qs({ stream, start, end })}`,
       z.object({
         lines: z.array(z.string()),
         total_lines: z.number(),
@@ -73,11 +72,6 @@ export const containers = {
         done: z.boolean(),
       }),
     ).map(r => ({ ...r, lines: r.lines ?? [] })),
-  events: (cid: string) =>
-    get(
-      `/api/v1/containers/${cid}/events`,
-      z.object({ events: z.array(z.unknown()) }),
-    ).map(r => r.events),
 }
 
 export const packages = {

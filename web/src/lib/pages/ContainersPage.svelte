@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import type { ContainerInfo } from '$lib/api'
+import type { Sandbox } from '@recoder-neo/schema'
 import * as api from '$lib/api'
 import {
   closeContainerUrl,
@@ -29,14 +29,14 @@ import ContainerWorkspace from '$lib/components/ContainerWorkspace.svelte'
 import { Button } from '$lib/components/ui/button'
 import * as Card from '$lib/components/ui/card'
 
-let containers = $state<ContainerInfo[]>([])
+let containers = $state<Sandbox[]>([])
 let loading = $state(false)
 let creating = $state(false)
 let deleting = $state<string | null>(null)
 let error = $state('')
 let selectedTerminal = $derived(router.containers.containerId)
 
-let confirmDelete = $state<ContainerInfo | null>(null)
+let confirmDelete = $state<Sandbox | null>(null)
 let confirmBusy = $state(false)
 
 // Create container dialog
@@ -68,9 +68,6 @@ async function loadAll() {
 }
 
 async function loadWorkerImages() {
-  workerImagesLoading = true
-  const r = await api.workerImages.list()
-  if (r.isOk()) workerImages = r.value
   workerImagesLoading = false
 }
 
@@ -87,49 +84,20 @@ function openBuildWorker() {
 }
 
 async function onBuildWorker() {
-  const base = buildBaseImage.trim()
-  if (!base) {
-    buildError = 'Enter a base image'
-    return
-  }
-  building = true
-  buildError = ''
-  const r = await api.workerImages.build(base)
-  if (r.isOk()) {
-    showBuildWorker = false
-    await loadWorkerImages()
-  } else {
-    buildError = r.error
-  }
-  building = false
+  buildError = 'Worker image build moved to ops-extension'
 }
 
 async function onCreateContainer() {
-  if (!createImage.trim()) {
-    createError = 'Enter an image'
-    return
-  }
-  const image = createImage.trim()
-  creating = true
-  error = ''
-  createError = ''
-  const r = await api.containers.create({ image })
-  if (r.isOk()) {
-    showCreate = false
-    await loadAll()
-    await store.refreshSessions()
-  } else {
-    createError = r.error
-  }
-  creating = false
+  createError = 'Sandboxes are created by the agent on first use. Use the ops-extension UI to deploy services.'
+  showCreate = false
 }
 
-async function destroyContainer(cid: string) {
-  deleting = cid
+async function destroyContainer(session: string) {
+  deleting = session
   error = ''
-  const r = await api.containers.destroy(cid)
+  const r = await api.containers.destroySandbox(session)
   if (r.isOk()) {
-    if (selectedTerminal === cid) closeContainerUrl()
+    if (selectedTerminal === session) closeContainerUrl()
     await loadAll()
   } else {
     error = r.error
@@ -141,15 +109,15 @@ async function runConfirmDelete() {
   if (!confirmDelete) return
   confirmBusy = true
   try {
-    await destroyContainer(confirmDelete.id)
+    await destroyContainer(confirmDelete.session)
   } finally {
     confirmBusy = false
   }
 }
 
-function termContainer(): ContainerInfo | undefined {
+function termContainer(): Sandbox | undefined {
   if (!selectedTerminal) return undefined
-  return containers.find(x => x.id === selectedTerminal)
+  return containers.find(x => x.session === selectedTerminal)
 }
 </script>
 
@@ -160,12 +128,12 @@ function termContainer(): ContainerInfo | undefined {
                 <ArrowLeft class="size-4" /> Back
             </Button>
             <span class="text-muted-foreground/40">/</span>
-            <span class="text-sm font-mono">{termContainer()?.name || selectedTerminal}</span>
+            <span class="text-sm font-mono">{termContainer()?.session || selectedTerminal}</span>
         </div>
         <div class="flex-1 min-h-0">
             <ContainerWorkspace
                 containerId={selectedTerminal}
-                containerName={termContainer()?.name || selectedTerminal}
+                containerName={termContainer()?.session || selectedTerminal}
                 onclose={closeContainerUrl}
             />
         </div>
@@ -248,17 +216,13 @@ function termContainer(): ContainerInfo | undefined {
                     </div>
                 {:else}
                     <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {#each containers as c (c.id)}
+                        {#each containers as c (c.session)}
                             <Card.Root>
                                 <Card.Header class="pb-2">
                                     <div class="flex items-center justify-between gap-2">
-                                        <Card.Title class="text-sm font-mono truncate">{c.name}</Card.Title>
+                                        <Card.Title class="text-sm font-mono truncate">{c.pod_name}</Card.Title>
                                         <div class="flex items-center gap-1.5 shrink-0">
-                                            {#if c.kind === 'deploy'}
-                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">deploy</span>
-                                            {:else}
-                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">sandbox</span>
-                                            {/if}
+<span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400">sandbox</span>
                                             <span class="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium
                                                 {c.status === 'running' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                                                  c.status === 'starting' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
@@ -269,22 +233,11 @@ function termContainer(): ContainerInfo | undefined {
                                         </div>
                                     </div>
                                     <Card.Description class="text-xs">
-                                        {#if c.image}
-                                            <span class="font-mono break-all">{c.image}</span>
-                                        {:else if c.session_id}
-                                            <span class="font-mono break-all">{c.org}/{c.repo}/{c.branch}</span>
-                                        {:else}
-                                            <span class="text-muted-foreground">standalone</span>
-                                        {/if}
+<span class="font-mono break-all">{c.session}</span>
                                     </Card.Description>
                                 </Card.Header>
                                 <Card.Content class="text-xs text-muted-foreground space-y-1.5 pt-1">
-                                    {#if c.kind === 'deploy' && c.service_url}
-                                        <div class="flex items-start gap-1.5">
-                                            <Globe class="size-3 shrink-0 mt-0.5" />
-                                            <span class="break-all font-mono">{c.service_url}</span>
-                                        </div>
-                                    {:else if c.worker_url}
+                                    {#if c.worker_url}
                                         <div class="flex items-start gap-1.5">
                                             <Server class="size-3 shrink-0 mt-0.5" />
                                             <span class="break-all font-mono">{c.worker_url}</span>
@@ -292,19 +245,13 @@ function termContainer(): ContainerInfo | undefined {
                                     {/if}
                                 </Card.Content>
                                 <Card.Footer class="pt-2 gap-2">
-                                    {#if c.kind === 'deploy'}
-                                        <Button size="sm" variant="outline" class="flex-1" disabled title="Deployed apps have no terminal — use the service URL">
-                                            <Globe class="size-3.5" /> Service
-                                        </Button>
-                                    {:else}
-                                        <Button size="sm" variant="outline" class="flex-1" disabled={c.status !== 'running'} onclick={() => openContainerUrl(c.id)}>
-                                            <Terminal class="size-3.5" /> Terminal
-                                        </Button>
-                                    {/if}
+                                    <Button size="sm" variant="outline" class="flex-1" disabled={c.status !== 'running'} onclick={() => openContainerUrl(c.session)}>
+                                        <Terminal class="size-3.5" /> Terminal
+                                    </Button>
                                     <Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10"
-                                        disabled={deleting === c.id}
+                                        disabled={deleting === c.session}
                                         onclick={() => { confirmDelete = c }}>
-                                        {#if deleting === c.id}<Loader2 class="size-3.5 animate-spin" />{:else}<Trash2 class="size-3.5" />{/if}
+                                        {#if deleting === c.session}<Loader2 class="size-3.5 animate-spin" />{:else}<Trash2 class="size-3.5" />{/if}
                                     </Button>
                                 </Card.Footer>
                             </Card.Root>
@@ -319,7 +266,7 @@ function termContainer(): ContainerInfo | undefined {
 <ConfirmDialog
     open={!!confirmDelete}
     title="Destroy container"
-    description={confirmDelete ? `Destroy <strong>${confirmDelete.name || confirmDelete.id}</strong>? ${confirmDelete.kind === 'deploy' ? 'This removes the deployment and its service.' : 'This stops and removes the worker pod.'}` : ''}
+    description={confirmDelete ? `Destroy <strong>${confirmDelete.pod_name || confirmDelete.session}</strong>? This stops and removes the worker pod.` : ''}
     confirmText="Destroy"
     busy={confirmBusy}
     onConfirm={runConfirmDelete}

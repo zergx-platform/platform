@@ -38,8 +38,6 @@ func Router(a *API) http.Handler {
 	r.Post("/sessions/{id}/fork", a.forkSession)
 	r.Get("/fs/list", a.fsList)
 	r.Get("/fs/read", a.fsRead)
-	r.Get("/containers", a.listContainers)
-	r.Post("/containers", a.createContainer)
 	r.Get("/packages", a.packageTypes)
 	r.Get("/packages/list", a.packageList)
 	r.Get("/packages/{type}/{name}/versions", a.packageVersions)
@@ -672,67 +670,6 @@ func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"content": content})
-}
-
-// ---- containers: ops-extension adapted to the UI ContainerInfo shape ----
-
-func (a *API) listContainers(w http.ResponseWriter, r *http.Request) {
-	var res struct {
-		Containers []struct {
-			ContainerID string `json:"container_id"`
-			PodName     string `json:"pod_name"`
-			WorkerURL   string `json:"worker_url"`
-			Status      string `json:"status"`
-		} `json:"containers"`
-	}
-	if err := a.Up.Ops.JSON(r.Context(), http.MethodGet, "/api/v1/containers", nil, nil, &res); err != nil {
-		badGateway(w, "ops-extension", err)
-		return
-	}
-	out := []map[string]interface{}{}
-	for _, c := range res.Containers {
-		out = append(out, map[string]interface{}{
-			"id":           c.ContainerID,
-			"name":         c.PodName,
-			"image":        nil,
-			"worker_url":   c.WorkerURL,
-			"container_id": c.PodName,
-			"session_id":   nil,
-			"org":          nil,
-			"repo":         nil,
-			"branch":       nil,
-			"status":       c.Status,
-			"created_at":   nil,
-			"kind":         "worker",
-			"service_url":  nil,
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"containers": out})
-}
-
-func (a *API) createContainer(w http.ResponseWriter, r *http.Request) {
-	var body map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid body")
-		return
-	}
-	var res map[string]interface{}
-	if err := a.Up.Ops.JSON(r.Context(), http.MethodPost, "/api/v1/containers", body, nil, &res); err != nil {
-		badGateway(w, "ops-extension", err)
-		return
-	}
-	if c, ok := res["container"].(map[string]interface{}); ok {
-		for _, k := range []string{"created_at", "kind", "service_url"} {
-			if _, has := c[k]; !has {
-				if k == "kind" {
-					c[k] = "worker"
-				} else {
-					c[k] = nil
-				}
-			}
-		}
-	}
-	writeJSON(w, http.StatusOK, res)
 }
 
 // ---- repo lifecycle adaptations ----

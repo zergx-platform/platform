@@ -147,9 +147,7 @@ $effect(() => {
 const sessionWorkerId = $derived.by(() => {
   const s = store.activeSession
   if (!s) return null
-  if (s.worker_url) return s.id
-  if (s.container_id) return s.container_id
-  return null
+  return `${s.org}:${s.repo}:${s.branch}`
 })
 
 // auto-scroll on new content
@@ -230,24 +228,46 @@ async function loadTodos(sid: string) {
 
 async function loadContainer(sid: string) {
   containerLoading = true
+  const s = store.activeSession
+  if (!s) {
+    containerLoading = false
+    return
+  }
+  // Session name is org:repo:bookmark; the sandbox pod is keyed by it.
+  const sessionName = `${s.org}:${s.repo}:${s.branch}`
   const r = await api.containers.list()
   if (r.isOk()) {
-    const s = store.activeSession
-    containerRow =
-      r.value.find(
-        c =>
-          c.session_id === sid ||
-          (s?.container_id ? c.container_id === s.container_id : false),
-      ) ?? null
+    const sb = r.value.find(c => c.session === sessionName)
+    containerRow = sb
+      ? {
+          id: sb.session,
+          name: sb.pod_name,
+          image: null,
+          worker_url: sb.worker_url,
+          container_id: sb.container_id,
+          session_id: sb.session,
+          org: s.org,
+          repo: s.repo,
+          branch: s.branch,
+          status: sb.status,
+          created_at: null,
+          kind: 'worker',
+          service_url: null,
+        }
+      : null
   }
   containerLoading = false
 }
 
 async function createBoundContainer() {
   if (!store.activeSessionId) return
+  const s = store.activeSession
+  if (!s) return
   containerLoading = true
-  const r = await api.containers.create({ session_id: store.activeSessionId })
-  if (r.isOk()) containerRow = r.value
+  // Sandboxes are created lazily by the first sandbox tool call; a no-op exec
+  // through the gateway warms it up on demand.
+  await api.containers.exec(`${s.org}:${s.repo}:${s.branch}`, 'true')
+  await loadContainer(store.activeSessionId)
   containerLoading = false
 }
 

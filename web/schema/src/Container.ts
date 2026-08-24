@@ -17,6 +17,29 @@ export const ContainerInfoSchema = z.object({
 })
 export type ContainerInfo = z.infer<typeof ContainerInfoSchema>
 
+export const SandboxSchema = z.object({
+  container_id: z.string(),
+  session: z.string(),
+  pod_name: z.string(),
+  status: z.string(),
+  worker_url: z.string(),
+  pod_ip: z.string(),
+  synced_rev: z.string(),
+})
+export type Sandbox = z.infer<typeof SandboxSchema>
+
+export const DeploymentSchema = z.object({
+  name: z.string(),
+  image: z.string(),
+  replicas: z.number(),
+  ready: z.number(),
+  namespace: z.string(),
+  age: z.string(),
+  ports: z.array(z.number()),
+  session: z.string().optional(),
+})
+export type Deployment = z.infer<typeof DeploymentSchema>
+
 export const JobInfoSchema = z.object({
   id: z.string(),
   command: z.string(),
