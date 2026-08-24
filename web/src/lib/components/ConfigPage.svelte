@@ -53,20 +53,23 @@ let saved = $state(false)
 let providers = $state<Record<string, ProviderInfo>>({})
 let models = $state<ModelInfo[]>([])
 let backend = $derived(values.container_backend || 'kubernetes')
+let k8sInfo = $state<{ namespace: string; worker_image: string } | null>(null)
 
 let stack = $state<DetailId[]>([])
 let activeId = $derived(stack.length > 0 ? stack[stack.length - 1] : null)
 let activeDetail = $derived(DETAILS.find(d => d.id === activeId) ?? null)
 
 onMount(async () => {
-  const [cr, pr, mr] = await Promise.all([
+  const [cr, pr, mr, kr] = await Promise.all([
     api.config.get(),
     api.providers.list(),
     api.models.list(),
+    api.infra.k8sConfig(),
   ])
   values = cr.isOk() ? cr.value : {}
   providers = pr.isOk() ? pr.value : {}
   models = mr.isOk() ? mr.value : []
+  k8sInfo = kr.isOk() ? kr.value : null
   loading = false
 })
 
@@ -143,6 +146,12 @@ async function refreshProviders() {
                 </div>
                 {#if backend === "kubernetes"}
                     <div class="space-y-3">
+                        {#if k8sInfo}
+                            <div class="rounded-md border border-border bg-muted/40 p-3 text-xs space-y-1">
+                                <div class="flex justify-between gap-2"><span class="text-muted-foreground">Namespace</span><span class="font-mono">{k8sInfo.namespace}</span></div>
+                                <div class="flex justify-between gap-2"><span class="text-muted-foreground">Worker Image</span><span class="font-mono truncate max-w-[240px]">{k8sInfo.worker_image}</span></div>
+                            </div>
+                        {/if}
                         <div><label class="text-sm font-medium" for="k8s_img">Worker Image</label>
                             <input id="k8s_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="recoder-dev002.develop.10.199.64.20.nip.io/recoder-worker:latest" value={values["worker_base_image"] || ""} oninput={(e) => values = { ...values, worker_base_image: e.currentTarget.value }} /></div>
                         <div><label class="text-sm font-medium" for="k8s_ns">Namespace</label>

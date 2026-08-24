@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import type { Sandbox } from '@recoder-neo/schema'
+import type { Deployment, Sandbox } from '@recoder-neo/schema'
 import * as api from '$lib/api'
 import {
   closeContainerUrl,
@@ -30,6 +30,7 @@ import { Button } from '$lib/components/ui/button'
 import * as Card from '$lib/components/ui/card'
 
 let containers = $state<Sandbox[]>([])
+let deployments = $state<Deployment[]>([])
 let loading = $state(false)
 let creating = $state(false)
 let deleting = $state<string | null>(null)
@@ -39,14 +40,24 @@ let selectedTerminal = $derived(router.containers.containerId)
 let confirmDelete = $state<Sandbox | null>(null)
 let confirmBusy = $state(false)
 
+// Deployments
+let showDeploy = $state(false)
+let deployName = $state('')
+let deployImage = $state('')
+let deployReplicas = $state(1)
+let deployPort = $state(8080)
+let deploySession = $state('')
+let deploying = $state(false)
+let deployError = $state('')
+let confirmDeployDelete = $state<string | null>(null)
+let deployDeleteBusy = $state(false)
+
 // Create container dialog
 let showCreate = $state(false)
 let createImage = $state('')
 let createError = $state('')
 
-// Worker images
-let workerImages = $state<{ tag: string; image: string }[]>([])
-let workerImagesLoading = $state(false)
+// Worker images (build)
 let showBuildWorker = $state(false)
 let buildBaseImage = $state('')
 let buildError = $state('')
@@ -54,21 +65,20 @@ let building = $state(false)
 
 onMount(() => {
   loadAll()
-  loadWorkerImages()
   return onHashChange(() => {})
 })
 
 async function loadAll() {
   loading = true
   error = ''
-  const r = await api.containers.list()
-  if (r.isOk()) containers = r.value
-  else error = r.error
+  const [cr, dr] = await Promise.all([
+    api.containers.list(),
+    api.containers.deployments(),
+  ])
+  containers = cr.isOk() ? cr.value : []
+  deployments = dr.isOk() ? dr.value : []
+  if (cr.isErr() && dr.isErr()) error = cr.error
   loading = false
-}
-
-async function loadWorkerImages() {
-  workerImagesLoading = false
 }
 
 function openCreate() {
@@ -84,12 +94,67 @@ function openBuildWorker() {
 }
 
 async function onBuildWorker() {
-  buildError = 'Worker image build moved to ops-extension'
+  if (!buildBaseImage.trim()) return
+  building = true
+  buildError = ''
+  const r = await api.containers.buildImage({
+    raw: true,
+    dockerfile: `FROM ${buildBaseImage}\n`,
+    tag: 'worker',
+  })
+  if (r.isOk()) {
+    showBuildWorker = false
+    await loadAll()
+  } else {
+    buildError = r.error
+  }
+  building = false
 }
 
 async function onCreateContainer() {
   createError = 'Sandboxes are created by the agent on first use. Use the ops-extension UI to deploy services.'
   showCreate = false
+}
+
+function openDeploy() {
+  deployName = ''
+  deployImage = ''
+  deployReplicas = 1
+  deployPort = 8080
+  deploySession = store.activeSessionId ?? ''
+  deployError = ''
+  showDeploy = true
+}
+
+async function onDeploy() {
+  if (!deployName.trim() || !deployImage.trim()) {
+    deployError = 'Name and image required'
+    return
+  }
+  deploying = true
+  deployError = ''
+  const r = await api.containers.deploy({
+    name: deployName,
+    image: deployImage,
+    replicas: deployReplicas,
+    port: deployPort,
+    session: deploySession || undefined,
+  })
+  if (r.isOk()) {
+    showDeploy = false
+    await loadAll()
+  } else {
+    deployError = r.error
+  }
+  deploying = false
+}
+
+async function destroyDeployment(name: string) {
+  deployDeleteBusy = true
+  const r = await api.containers.destroyDeployment(name)
+  if (r.isOk()) await loadAll()
+  else error = r.error
+  deployDeleteBusy = false
 }
 
 async function destroyContainer(session: string) {
@@ -151,9 +216,13 @@ function termContainer(): Sandbox | undefined {
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onclick={openDeploy}>
+                        <Globe class="size-3.5" />
+                        <span class="hidden sm:inline">Deploy Service</span>
+                    </Button>
                     <Button variant="outline" size="sm" onclick={openBuildWorker}>
                         <Server class="size-3.5" />
-                        <span class="hidden sm:inline">Build Worker Image</span>
+                        <span class="hidden sm:inline">Build Image</span>
                     </Button>
                     <Button variant="outline" size="sm" onclick={loadAll} disabled={loading}>
                         <RefreshCw class="size-3.5 {loading ? 'animate-spin' : ''}" />
@@ -174,31 +243,39 @@ function termContainer(): Sandbox | undefined {
                     <div class="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</div>
                 {/if}
 
-                <!-- Worker images -->
+                <!-- Deployments -->
                 <div class="rounded-lg border border-border bg-card p-4">
                     <div class="flex items-center justify-between mb-3">
                         <div>
-                            <h2 class="text-sm font-semibold">Worker Images</h2>
-                            <p class="text-xs text-muted-foreground">Pre-built sandbox base images selectable per session.</p>
+                            <h2 class="text-sm font-semibold">Deployments</h2>
+                            <p class="text-xs text-muted-foreground">Services deployed from sandboxes or images.</p>
                         </div>
-                        <Button variant="outline" size="sm" onclick={openBuildWorker} disabled={workerImagesLoading || building}>
-                            <Server class="size-3.5" />
-                            <span>Build</span>
+                        <Button variant="outline" size="sm" onclick={openDeploy}>
+                            <Globe class="size-3.5" />
+                            <span>Deploy</span>
                         </Button>
                     </div>
-                    {#if workerImagesLoading}
-                        <div class="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                            <Loader2 class="size-3.5 animate-spin" /> Loading...
-                        </div>
-                    {:else if workerImages.length === 0}
-                        <p class="text-xs text-muted-foreground py-1">No worker images built yet.</p>
+                    {#if deployments.length === 0}
+                        <p class="text-xs text-muted-foreground py-1">No deployments yet.</p>
                     {:else}
-                        <div class="flex flex-wrap gap-2">
-                            {#each workerImages as w (w.tag)}
-                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-xs font-mono">
-                                    <Box class="size-3 text-primary" />
-                                    {w.tag}
-                                </span>
+                        <div class="space-y-2">
+                            {#each deployments as d (d.name)}
+                                <div class="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2 text-xs">
+                                    <Globe class="size-3.5 text-primary shrink-0" />
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-mono font-medium truncate">{d.name}</div>
+                                        <div class="text-muted-foreground truncate">{d.image}</div>
+                                    </div>
+                                    <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground">{d.ready}/{d.replicas} ready</span>
+                                    {#if d.ports.length > 0}
+                                        <span class="shrink-0 text-muted-foreground font-mono">:{d.ports.join(',:')}</span>
+                                    {/if}
+                                    <span class="shrink-0 text-muted-foreground text-[10px]">{d.age}</span>
+                                    <Button variant="ghost" size="icon" class="size-6 shrink-0 text-destructive hover:bg-destructive/10" disabled={deployDeleteBusy}
+                                        onclick={() => destroyDeployment(d.name)}>
+                                        <Trash2 class="size-3.5" />
+                                    </Button>
+                                </div>
                             {/each}
                         </div>
                     {/if}
@@ -277,9 +354,9 @@ function termContainer(): Sandbox | undefined {
 {#if showBuildWorker}
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/40" role="presentation" onclick={() => showBuildWorker = false}>
-        <div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-md mx-4 space-y-3 p-4" role="dialog" tabindex="-1" aria-label="Build worker image" onclick={(e) => e.stopPropagation()}>
+        <div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-md mx-4 space-y-3 p-4" role="dialog" tabindex="-1" aria-label="Build image" onclick={(e) => e.stopPropagation()}>
             <div class="flex items-center justify-between">
-                <h3 class="text-sm font-semibold">Build Worker Image</h3>
+                <h3 class="text-sm font-semibold">Build Image</h3>
                 <Button variant="ghost" size="icon" class="size-6" onclick={() => showBuildWorker = false}><X class="size-3.5" /></Button>
             </div>
 
@@ -287,7 +364,7 @@ function termContainer(): Sandbox | undefined {
                 <label class="text-xs font-medium text-muted-foreground" for="bwi-base">Base Image</label>
                 <input id="bwi-base" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
                     placeholder="debian:trixie-slim" bind:value={buildBaseImage} />
-                <p class="text-[10px] text-muted-foreground mt-1">The static worker binary is copied into this base image and published as recoder-worker:&lt;tag&gt;.</p>
+                <p class="text-[10px] text-muted-foreground mt-1">Builds a minimal image from this base and pushes it to the registry.</p>
             </div>
 
             {#if buildError}
@@ -299,6 +376,56 @@ function termContainer(): Sandbox | undefined {
                     {#if building}<Loader2 class="size-3.5 animate-spin mr-1" />{/if}Build
                 </Button>
                 <Button variant="ghost" size="sm" onclick={() => showBuildWorker = false}>Cancel</Button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Deploy Service Modal -->
+{#if showDeploy}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/40" role="presentation" onclick={() => showDeploy = false}>
+        <div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-md mx-4 space-y-3 p-4" role="dialog" tabindex="-1" aria-label="Deploy service" onclick={(e) => e.stopPropagation()}>
+            <div class="flex items-center justify-between">
+                <h3 class="text-sm font-semibold">Deploy Service</h3>
+                <Button variant="ghost" size="icon" class="size-6" onclick={() => showDeploy = false}><X class="size-3.5" /></Button>
+            </div>
+
+            <div>
+                <label class="text-xs font-medium text-muted-foreground" for="dep-name">Name</label>
+                <input id="dep-name" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
+                    placeholder="my-service" bind:value={deployName} />
+            </div>
+            <div>
+                <label class="text-xs font-medium text-muted-foreground" for="dep-image">Image</label>
+                <input id="dep-image" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
+                    placeholder="nginx:latest" bind:value={deployImage} />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-xs font-medium text-muted-foreground" for="dep-replicas">Replicas</label>
+                    <input id="dep-replicas" type="number" min="1" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs" bind:value={deployReplicas} />
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-muted-foreground" for="dep-port">Port</label>
+                    <input id="dep-port" type="number" min="1" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs" bind:value={deployPort} />
+                </div>
+            </div>
+            <div>
+                <label class="text-xs font-medium text-muted-foreground" for="dep-session">Session (optional)</label>
+                <input id="dep-session" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
+                    placeholder="org:repo:branch" bind:value={deploySession} />
+            </div>
+
+            {#if deployError}
+                <p class="text-xs text-destructive">{deployError}</p>
+            {/if}
+
+            <div class="flex items-center gap-2 pt-1">
+                <Button size="sm" onclick={onDeploy} disabled={deploying || !deployName.trim() || !deployImage.trim()}>
+                    {#if deploying}<Loader2 class="size-3.5 animate-spin mr-1" />{/if}Deploy
+                </Button>
+                <Button variant="ghost" size="sm" onclick={() => showDeploy = false}>Cancel</Button>
             </div>
         </div>
     </div>

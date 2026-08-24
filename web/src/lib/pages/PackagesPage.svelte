@@ -13,6 +13,7 @@ import {
   Search,
   Server,
   Trash2,
+  Upload,
   X,
 } from '@lucide/svelte'
 import type { PackageTypeEntry, RecoreConfig } from '@recoder-neo/schema'
@@ -85,6 +86,54 @@ const TYPE_LABELS: Record<string, string> = {
 onMount(() => {
   loadAll()
 })
+
+// Publish form state
+let showPublish = $state(false)
+let publishSpecs = $state<Array<{ protocol: string; args: string[] | null; required: string[] | null }>>([])
+let publishProtocol = $state('')
+let publishName = $state('')
+let publishVersion = $state('')
+let publishOrg = $state('')
+let publishRepo = $state('')
+let publishBookmark = $state('')
+let publishFile = $state('')
+let publishing = $state(false)
+let publishError = $state('')
+
+async function openPublish() {
+  publishError = ''
+  const r = await api.containers.publishSpecs()
+  publishSpecs = r.isOk() ? r.value : []
+  publishProtocol = ''
+  showPublish = true
+}
+
+async function onPublish() {
+  if (!publishProtocol || !publishOrg || !publishRepo || !publishBookmark) {
+    publishError = 'Protocol, org, repo and bookmark required'
+    return
+  }
+  publishing = true
+  publishError = ''
+  const r = await api.containers.publishPackage({
+    protocol: publishProtocol,
+    org: publishOrg,
+    repo: publishRepo,
+    bookmark: publishBookmark,
+    session: '',
+    name: publishName,
+    version: publishVersion,
+    file: publishFile,
+    dockerfile_path: '',
+  })
+  if (r.isOk()) {
+    showPublish = false
+    await loadAll()
+  } else {
+    publishError = r.error
+  }
+  publishing = false
+}
 
 async function loadAll() {
   loading = true
@@ -230,6 +279,14 @@ const filtered = $derived(
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={openPublish}
+				>
+					<Upload class="size-3.5" />
+					<span class="hidden sm:inline">Publish</span>
+				</Button>
 				<Button
 					variant="outline"
 					size="sm"
@@ -678,6 +735,64 @@ const filtered = $derived(
 				<Button variant="ghost" size="sm" onclick={() => (confirmDelete = null)}>
 					Cancel
 				</Button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Publish Modal -->
+{#if showPublish}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/40" role="presentation" onclick={() => showPublish = false}>
+		<div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-lg mx-4 space-y-3 p-4" role="dialog" tabindex="-1" aria-label="Publish package" onclick={(e) => e.stopPropagation()}>
+			<div class="flex items-center justify-between">
+				<h3 class="text-sm font-semibold">Publish Package</h3>
+				<Button variant="ghost" size="icon" class="size-6" onclick={() => showPublish = false}><X class="size-3.5" /></Button>
+			</div>
+
+			<div>
+				<label class="text-xs font-medium text-muted-foreground" for="pub-protocol">Protocol</label>
+				<select id="pub-protocol" class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs" bind:value={publishProtocol}>
+					<option value="">Select protocol</option>
+					{#each publishSpecs as s (s.protocol)}
+						<option value={s.protocol}>{s.protocol}</option>
+					{/each}
+				</select>
+			</div>
+			<div class="grid grid-cols-2 gap-3">
+				<div>
+					<label class="text-xs font-medium text-muted-foreground" for="pub-org">Org</label>
+					<input id="pub-org" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono" bind:value={publishOrg} />
+				</div>
+				<div>
+					<label class="text-xs font-medium text-muted-foreground" for="pub-repo">Repo</label>
+					<input id="pub-repo" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono" bind:value={publishRepo} />
+				</div>
+			</div>
+			<div class="grid grid-cols-2 gap-3">
+				<div>
+					<label class="text-xs font-medium text-muted-foreground" for="pub-bookmark">Bookmark</label>
+					<input id="pub-bookmark" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono" bind:value={publishBookmark} />
+				</div>
+				<div>
+					<label class="text-xs font-medium text-muted-foreground" for="pub-version">Version</label>
+					<input id="pub-version" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono" bind:value={publishVersion} />
+				</div>
+			</div>
+			<div>
+				<label class="text-xs font-medium text-muted-foreground" for="pub-name">Package name (optional)</label>
+				<input id="pub-name" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono" bind:value={publishName} />
+			</div>
+
+			{#if publishError}
+				<p class="text-xs text-destructive">{publishError}</p>
+			{/if}
+
+			<div class="flex items-center gap-2 pt-1">
+				<Button size="sm" onclick={onPublish} disabled={publishing || !publishProtocol}>
+					{#if publishing}<Loader2 class="size-3.5 animate-spin mr-1" />{/if}Publish
+				</Button>
+				<Button variant="ghost" size="sm" onclick={() => showPublish = false}>Cancel</Button>
 			</div>
 		</div>
 	</div>

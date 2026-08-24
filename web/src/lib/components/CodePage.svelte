@@ -1,5 +1,6 @@
 <script lang="ts">
 import { getStore } from '$lib/stores.svelte'
+import * as api from '$lib/api'
 
 const store = getStore()
 
@@ -11,7 +12,9 @@ import {
   Folder,
   FolderGit,
   GitBranch,
+  GitCommitHorizontal,
   History,
+  Tag,
   X,
 } from '@lucide/svelte'
 import { Button } from '$lib/components/ui/button'
@@ -20,6 +23,13 @@ import DiffView from './DiffView.svelte'
 import TreeNode from './TreeNode.svelte'
 
 let mobileRepoSheet = $state(false)
+let view = $state<'tree' | 'commits'>('tree')
+let commits = $state<Array<{ change_id: string; commit_id: string; author: string; timestamp: string; message: string }>>([])
+let commitsLoading = $state(false)
+let tags = $state<Array<{ name: string; target: string }>>([])
+let showBlame = $state(false)
+let blame = $state<string[]>([])
+let blameLoading = $state(false)
 
 function relativeTime(ts: string): string {
   const d = new Date(`${ts}Z`)
@@ -37,6 +47,39 @@ function relativeTime(ts: string): string {
 
 function shortId(id: string): string {
   return id.slice(0, 8)
+}
+
+async function loadCommits() {
+  if (!store.codeOrg || !store.codeRepo) return
+  commitsLoading = true
+  view = 'commits'
+  const [cr, tr] = await Promise.all([
+    api.repos.log(store.codeOrg, store.codeRepo, { limit: 100 }),
+    api.repos.tags(store.codeOrg, store.codeRepo),
+  ])
+  commits = cr.isOk() ? cr.value : []
+  tags = tr.isOk() ? tr.value : []
+  commitsLoading = false
+}
+
+async function loadBlame() {
+  if (!store.codeOrg || !store.codeRepo || !store.selectedFilePath) return
+  blameLoading = true
+  showBlame = !showBlame
+  if (showBlame && blame.length === 0) {
+    const r = await api.repos.blame(
+      store.codeOrg,
+      store.codeRepo,
+      store.codeBranch || 'main',
+      store.selectedFilePath,
+    )
+    blame = r.isOk() ? r.value : []
+  }
+  blameLoading = false
+}
+
+function showTree() {
+  view = 'tree'
 }
 </script>
 
@@ -91,6 +134,12 @@ function shortId(id: string): string {
             {#if store.codeBranch}
                 <span class="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-mono">{store.codeBranch}</span>
             {/if}
+            {#if store.codeRepo}
+                <div class="flex-1"></div>
+                <button class="p-1 rounded hover:bg-accent/60 text-muted-foreground" title="Commits" onclick={loadCommits}>
+                    <GitCommitHorizontal class="size-3.5" />
+                </button>
+            {/if}
         </div>
         <div class="flex-1 overflow-y-auto">
             {#if !store.codeRepo}
@@ -98,6 +147,43 @@ function shortId(id: string): string {
                     <Folder class="size-8 opacity-30" />
                     <p class="text-xs">Select a repository</p>
                 </div>
+            {:else if view === 'commits'}
+                {#if commitsLoading}
+                    <div class="flex justify-center py-8"><span class="text-xs text-muted-foreground animate-pulse">Loading commits...</span></div>
+                {:else}
+                    {#if tags.length > 0}
+                        <div class="px-3 py-2 border-b border-border/40 flex flex-wrap gap-1.5">
+                            {#each tags as t (t.name)}
+                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-muted-foreground">
+                                    <Tag class="size-3 text-primary" />{t.name}
+                                </span>
+                            {/each}
+                        </div>
+                    {/if}
+                    {#if commits.length === 0}
+                        <div class="flex justify-center py-8"><span class="text-xs text-muted-foreground">No commits</span></div>
+                    {:else}
+                        <div class="py-1">
+                            {#each commits as commit (commit.commit_id)}
+                                <button
+                                    class="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-accent/40 transition-colors border-b border-border/40"
+                                    onclick={() => { view = 'tree'; store.selectedFilePath = null; store.fileContent = '' }}
+                                    title="Back to tree"
+                                >
+                                    <GitCommitHorizontal class="size-3 mt-0.5 text-primary shrink-0" />
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-xs font-medium truncate">{commit.message}</div>
+                                        <div class="text-[10px] text-muted-foreground flex items-center gap-2">
+                                            <span class="font-mono">{shortId(commit.commit_id)}</span>
+                                            <span>{commit.author}</span>
+                                            <span>{relativeTime(commit.timestamp)}</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            {/each}
+                        </div>
+                    {/if}
+                {/if}
             {:else if store.codeLoading}
                 <div class="flex justify-center py-8"><span class="text-xs text-muted-foreground animate-pulse">Loading...</span></div>
             {:else if !store.treeCache[""] || store.treeCache[""].length === 0}
@@ -123,7 +209,10 @@ function shortId(id: string): string {
                     <Button variant="ghost" size="icon" class="size-6" title={store.showFileHistory ? "View file" : "History"} onclick={store.showFileHistory ? () => store.showFileHistory = false : () => { store.showFileHistory = true; store.loadFileHistory() }}>
                         <History class="size-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" class="size-6" title="Close" onclick={() => { store.selectedFilePath = null; store.fileContent = ""; store.showFileHistory = false; store.activeDiffChangeId = null }}>
+                    <Button variant="ghost" size="icon" class="size-6" title="Blame" onclick={loadBlame}>
+                        <GitCommitHorizontal class="size-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" class="size-6" title="Close" onclick={() => { store.selectedFilePath = null; store.fileContent = ""; store.showFileHistory = false; store.activeDiffChangeId = null; showBlame = false; blame = [] }}>
                         <X class="size-3.5" />
                     </Button>
                 {/if}
@@ -131,6 +220,16 @@ function shortId(id: string): string {
             {#if store.activeDiffChangeId}
                 <div class="flex-1 overflow-auto">
                     <DiffView diffText={store.fileDiffs[store.activeDiffChangeId] || ""} />
+                </div>
+            {:else if showBlame}
+                <div class="flex-1 overflow-auto font-mono text-xs">
+                    {#if blameLoading}
+                        <div class="flex justify-center py-8"><span class="text-xs text-muted-foreground animate-pulse">Loading blame...</span></div>
+                    {:else if blame.length === 0}
+                        <div class="flex justify-center py-8"><span class="text-xs text-muted-foreground">No blame data</span></div>
+                    {:else}
+                        <pre class="p-4 whitespace-pre-wrap">{blame.join('\n')}</pre>
+                    {/if}
                 </div>
             {:else if store.showFileHistory}
                 <div class="flex-1 overflow-auto">

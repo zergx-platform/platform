@@ -40,6 +40,54 @@ export const DeploymentSchema = z.object({
 })
 export type Deployment = z.infer<typeof DeploymentSchema>
 
+export const DeploymentPodSchema = z.object({
+  name: z.string(),
+  ip: z.string(),
+  phase: z.string(),
+  ready: z.boolean(),
+  image: z.string(),
+  age: z.string(),
+  restarts: z.number(),
+})
+export type DeploymentPod = z.infer<typeof DeploymentPodSchema>
+
+export const ContainerfileTemplateSchema = z.object({
+  name: z.string(),
+  content: z.string(),
+})
+export type ContainerfileTemplate = z.infer<typeof ContainerfileTemplateSchema>
+
+export const ImageBuildResultSchema = z.object({
+  ok: z.boolean(),
+  image_id: z.string().optional(),
+  image: z.string().optional(),
+  pushed: z.boolean().optional(),
+})
+export type ImageBuildResult = z.infer<typeof ImageBuildResultSchema>
+
+export const OpsDependencySchema = z.object({
+  name: z.string(),
+  ok: z.boolean(),
+  status: z.number().optional(),
+  error: z.string().optional(),
+})
+export type OpsDependency = z.infer<typeof OpsDependencySchema>
+
+export const OpsStatusSchema = z.object({
+  ok: z.boolean(),
+  version: z.string(),
+  deps: z.array(OpsDependencySchema),
+  sandboxes: z.number(),
+})
+export type OpsStatus = z.infer<typeof OpsStatusSchema>
+
+export const PublishSpecSchema = z.object({
+  protocol: z.string(),
+  args: z.array(z.string()).nullable(),
+  required: z.array(z.string()).nullable(),
+})
+export type PublishSpec = z.infer<typeof PublishSpecSchema>
+
 export const JobInfoSchema = z.object({
   id: z.string(),
   command: z.string(),

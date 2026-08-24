@@ -42,6 +42,9 @@ func main() {
 		// jj-server passthroughs (diff/file/file-log/file-diff/delete/org…)
 		pair{"/api/v1/repos", up.Repo.Base},
 		pair{"/git", up.Repo.Base},
+		pair{"/api/v1/git-blame", up.Repo.Base},
+		pair{"/api/v1/git-diff", up.Repo.Base},
+		pair{"/api/v1/git-show", up.Repo.Base},
 		// repo-extension ops surface
 		pair{"/api/v1/session-map", up.RepoExt.Base},
 		// ops-extension (sandboxes + deployments + infra + images)
@@ -49,8 +52,12 @@ func main() {
 		pair{"/api/v1/deployments", up.Ops.Base},
 		pair{"/api/v1/infra", up.Ops.Base},
 		pair{"/api/v1/images", up.Ops.Base},
+		pair{"/api/v1/status", up.Ops.Base},
+		pair{"/api/v1/publish-specs", up.Ops.Base},
+		pair{"/api/v1/containerfile-templates", up.Ops.Base},
 		// artifact (packages + OCI)
 		pair{"/api/v1/packages", up.Artifact.Base},
+		pair{"/api/v1/packages/publish", up.Ops.Base},
 		pair{"/v2", up.Artifact.Base},
 		// browser
 		pair{"/api/v1/browser", up.Browser.Base},
@@ -127,6 +134,9 @@ func ownedByAggregate(path string) bool {
 		if path == e {
 			return true
 		}
+	}
+	if strings.HasPrefix(path, "/api/v1/packages/publish") {
+		return false // ops-extension publish (not artifact package CRUD)
 	}
 	if strings.HasPrefix(path, "/api/v1/packages/") {
 		return true // {type}/{name}/versions | {type}/{name} deletes

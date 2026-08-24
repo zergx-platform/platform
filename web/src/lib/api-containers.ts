@@ -5,6 +5,11 @@ import { qs } from './client'
 import {
   SandboxSchema,
   DeploymentSchema,
+  DeploymentPodSchema,
+  ContainerfileTemplateSchema,
+  ImageBuildResultSchema,
+  OpsStatusSchema,
+  PublishSpecSchema,
   ExecResultSchema,
   JobInfoSchema,
   OciCatalogSchema,
@@ -28,8 +33,85 @@ export const containers = {
       z.object({ deployments: z.array(DeploymentSchema) }),
     ).map(r => r.deployments),
 
+  /** Pods of one deployment. */
+  deploymentPods: (name: string) =>
+    get(
+      `/api/v1/deployments/${encodeURIComponent(name)}/pods`,
+      z.object({ pods: z.array(DeploymentPodSchema) }),
+    ).map(r => r.pods),
+
+  /** Rollout status of one deployment. */
+  deploymentStatus: (name: string) =>
+    get(
+      `/api/v1/deployments/${encodeURIComponent(name)}/status`,
+      z.object({
+        observed_generation: z.number(),
+        updated_replicas: z.number(),
+        ready_replicas: z.number(),
+        available_replicas: z.number(),
+        unavailable_replicas: z.number(),
+        conditions: z.array(z.unknown()),
+      }),
+    ),
+
+  deploy: (body: {
+    name: string
+    image: string
+    replicas?: number
+    port?: number
+    env?: Record<string, string>
+    session?: string
+  }) =>
+    post(
+      `/api/v1/deployments`,
+      body,
+      z.object({ ok: z.boolean(), name: z.string(), image: z.string() }),
+    ),
+
   destroySandbox: (session: string) => del(`/api/v1/sandboxes/${session}`),
   destroyDeployment: (name: string) => del(`/api/v1/deployments/${encodeURIComponent(name)}`),
+
+  /** ops-extension aggregated health/status. */
+  status: () =>
+    get(`/api/v1/status`, OpsStatusSchema),
+
+  /** Built-in Containerfile templates. */
+  containerfileTemplates: () =>
+    get(
+      `/api/v1/containerfile-templates`,
+      z.object({ templates: z.array(ContainerfileTemplateSchema) }),
+    ).map(r => r.templates),
+
+  /** Build + push an image from a raw Containerfile or a repo archive. */
+  buildImage: (body: {
+    dockerfile?: string
+    tag?: string
+    raw?: boolean
+    org?: string
+    repo?: string
+    bookmark?: string
+    push?: boolean
+  }) => post(`/api/v1/images/build`, body, ImageBuildResultSchema),
+
+  /** Per-protocol publish specs (dynamic publish form). */
+  publishSpecs: () =>
+    get(
+      `/api/v1/publish-specs`,
+      z.object({ specs: z.array(PublishSpecSchema) }),
+    ).map(r => r.specs),
+
+  /** Publish a package from a repo. */
+  publishPackage: (body: {
+    protocol: string
+    org: string
+    repo: string
+    bookmark: string
+    session: string
+    name: string
+    version: string
+    file: string
+    dockerfile_path: string
+  }) => post(`/api/v1/packages/publish`, body, z.object({ ok: z.boolean() })),
 
   jobs: (session: string) =>
     get(

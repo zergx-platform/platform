@@ -126,6 +126,85 @@ export const repos = {
       `/api/v1/repos/${org}/${repo}/file-diff/${changeId}${qs({ path: filePath })}`,
       z.object({ diff: z.string() }),
     ).map(r => r.diff),
+  log: (
+    org: string,
+    repo: string,
+    opts?: { rev?: string; limit?: number },
+  ) => {
+    const query: Record<string, string | number> = {}
+    if (opts?.rev) query.rev = opts.rev
+    if (opts?.limit) query.limit = opts.limit
+    const q = Object.keys(query).length ? `?${new URLSearchParams(query as Record<string, string>)}` : ''
+    return get(
+      `/api/v1/repos/${org}/${repo}/log${q}`,
+      z.object({
+        commits: z.array(
+          z.object({
+            change_id: z.string(),
+            commit_id: z.string(),
+            author: z.string(),
+            timestamp: z.string(),
+            message: z.string(),
+          }),
+        ),
+      }),
+    ).map(r => r.commits)
+  },
+  tags: (org: string, repo: string) =>
+    get(
+      `/api/v1/repos/${org}/${repo}/tags`,
+      z.object({
+        tags: z.array(z.object({ name: z.string(), target: z.string() })),
+      }),
+    ).map(r => r.tags),
+  blame: (org: string, repo: string, rev: string, filePath: string) =>
+    get(
+      `/api/v1/git-blame/${org}/${repo}${qs({ rev, path: filePath })}`,
+      z.object({ blame: z.array(z.string()) }),
+    ).map(r => r.blame),
+  graph: (org: string, repo: string, limit?: number) => {
+    const q = limit ? `?limit=${limit}` : ''
+    return get(
+      `/api/v1/repos/${org}/${repo}/graph${q}`,
+      z.object({
+        graph: z.array(
+          z.object({
+            commit_id: z.string(),
+            change_id: z.string(),
+            message: z.string(),
+            author: z.string(),
+            parents: z.array(z.string()),
+            edge_types: z.array(z.string()),
+            is_head: z.boolean(),
+          }),
+        ),
+      }),
+    ).map(r => r.graph)
+  },
+  mirrors: () =>
+    get(
+      `/api/v1/repos/mirrors`,
+      z.object({
+        mirrors: z.array(
+          z.object({
+            org: z.string(),
+            repo: z.string(),
+            mirror_url: z.string(),
+            has_secret: z.boolean(),
+          }),
+        ),
+        bookmark_mirrors: z.array(
+          z.object({
+            org: z.string(),
+            repo: z.string(),
+            bookmark: z.string(),
+            mirror_url: z.string(),
+            remote_bookmark: z.string(),
+            has_secret: z.boolean(),
+          }),
+        ),
+      }),
+    ),
 }
 
 export const config = {
