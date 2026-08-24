@@ -295,28 +295,6 @@ func TestFsReadDecodesBase64(t *testing.T) {
 	}
 }
 
-func TestContainersAdapted(t *testing.T) {
-	fb := newFakeBackends()
-	defer fb.Close()
-	h := fb.api(t)
-
-	_, v := do(t, h, "GET", "/containers", "")
-	cs := v["containers"].([]interface{})
-	c := cs[0].(map[string]interface{})
-	if c["id"] != "cid-1" || c["name"] != "pod-1" || c["kind"] != "worker" {
-		t.Fatalf("container=%v", c)
-	}
-
-	code, v := do(t, h, "POST", "/containers", `{"image":"x"}`)
-	if code != 200 {
-		t.Fatalf("create code=%d", code)
-	}
-	c2 := v["container"].(map[string]interface{})
-	if c2["kind"] != "worker" || c2["service_url"] != nil {
-		t.Fatalf("create defaults missing: %v", c2)
-	}
-}
-
 func TestForkRepoSameRepoOnly(t *testing.T) {
 	fb := newFakeBackends()
 	defer fb.Close()

@@ -45,7 +45,6 @@ import TimelinePage from './TimelinePage.svelte'
 
 let models = $state<ModelInfo[]>([])
 let presets = $state<PresetInfo[]>([])
-let workerImages = $state<{ tag: string; image: string }[]>([])
 let showModelPicker = $state(false)
 let showPresetPicker = $state(false)
 let showImagePicker = $state(false)
@@ -72,7 +71,6 @@ let containerLoading = $state(false)
 onMount(() => {
   loadModels()
   loadPresets()
-  loadWorkerImages()
 })
 
 // re-init when session changes
@@ -313,11 +311,6 @@ async function loadPresets() {
   presets = r.isOk() ? r.value : []
 }
 
-async function loadWorkerImages() {
-  const r = await api.workerImages.list()
-  workerImages = r.isOk() ? r.value : []
-}
-
 function applySession(updated: Session) {
   const idx = store.sessions.findIndex(s => s.id === updated.id)
   if (idx >= 0) store.sessions[idx] = updated
@@ -507,9 +500,6 @@ async function compact() {
                 <select id="ss-base-image" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
                     bind:value={sessionSettings.base_image}>
                     <option value="">default (debian:trixie-slim)</option>
-                    {#each workerImages as w (w.tag)}
-                        <option value={w.image}>{w.tag}</option>
-                    {/each}
                 </select>
             </div>
 
@@ -602,7 +592,7 @@ async function compact() {
                     </div>
 
                     <div class="relative">
-                        <button class="flex items-center gap-1 px-2 py-0.5 rounded border border-input hover:bg-accent/40 transition-colors" onclick={() => { loadWorkerImages(); showImagePicker = !showImagePicker }}>
+                        <button class="flex items-center gap-1 px-2 py-0.5 rounded border border-input hover:bg-accent/40 transition-colors" onclick={() => { showImagePicker = !showImagePicker }}>
                             <span class="font-medium">{currentBaseImageLabel}</span>
                             <ChevronDown class="size-3" />
                         </button>
@@ -610,11 +600,6 @@ async function compact() {
                             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                             <div class="absolute bottom-full left-0 mb-1 w-56 rounded-md border bg-popover shadow-md z-50 max-h-48 overflow-auto" role="listbox" tabindex="-1" aria-label="Worker image picker" onclick={() => showImagePicker = false}>
                                 <button class="w-full text-left px-3 py-1.5 text-xs hover:bg-accent {!store.activeSession?.base_image ? 'bg-accent/60 font-medium' : ''}" onclick={() => switchBaseImage('')}>debian-trixie-slim (default)</button>
-                                {#each workerImages as w (w.tag)}
-                                    <button class="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center justify-between {currentBaseImageLabel === w.tag ? 'bg-accent/60 font-medium' : ''}" onclick={() => switchBaseImage(w.image)}>
-                                        <span class="truncate">{w.tag}</span>
-                                    </button>
-                                {/each}
                             </div>
                         {/if}
                     </div>

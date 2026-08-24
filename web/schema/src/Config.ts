@@ -40,7 +40,7 @@ export type ToolConfigMap = z.infer<typeof ToolConfigMapSchema>
 export const ModelInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
-  provider_id: z.string(),
+  provider_id: z.string().optional(),
   context_limit: z.number().optional(),
   output_limit: z.number().optional(),
   max_tokens: z.number().optional(),

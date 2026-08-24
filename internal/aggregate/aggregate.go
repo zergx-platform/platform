@@ -37,6 +37,7 @@ func Router(a *API) http.Handler {
 	r.Get("/sessions/{id}/changes", a.sessionChanges)
 	r.Get("/sessions/{id}/todos", a.sessionTodos)
 	r.Post("/sessions/{id}/fork", a.forkSession)
+	r.Patch("/sessions/{id}/settings", a.sessionSettings)
 	r.Get("/fs/list", a.fsList)
 	r.Get("/fs/read", a.fsRead)
 	r.Get("/packages", a.packageTypes)
@@ -54,6 +55,7 @@ type pkgSummary struct {
 	Repository string   `json:"repository"`
 	Versions   []string `json:"versions"`
 	Source     string   `json:"source"`
+	Upstream   string   `json:"upstream"`
 }
 
 func (a *API) fetchPackages(ctx context.Context) ([]pkgSummary, error) {
@@ -78,12 +80,38 @@ func (a *API) packageTypes(w http.ResponseWriter, r *http.Request) {
 	}
 	types := []map[string]interface{}{}
 	for f, n := range seen {
-		types = append(types, map[string]interface{}{"type": f, "packages": n})
+		types = append(types, map[string]interface{}{
+			"type":     f,
+			"packages": n,
+			"upstream": defaultUpstream(f),
+		})
 	}
 	sort.Slice(types, func(i, j int) bool {
 		return types[i]["type"].(string) < types[j]["type"].(string)
 	})
 	writeJSON(w, http.StatusOK, map[string]interface{}{"types": types})
+}
+
+// defaultUpstream mirrors the artifact's well-known format -> public registry
+// map so the UI can show an upstream for each ecosystem.
+func defaultUpstream(format string) string {
+	m := map[string]string{
+		"cargo":    "https://crates.io",
+		"composer": "https://repo.packagist.org",
+		"conan":    "https://center.conan.io",
+		"go":       "https://proxy.golang.org",
+		"helm":     "https://charts.helm.sh/stable",
+		"hex":      "https://repo.hex.pm",
+		"maven":    "https://repo.maven.apache.org/maven2",
+		"npm":      "https://registry.npmjs.org",
+		"nuget":    "https://api.nuget.org",
+		"pub":      "https://pub.dev",
+		"pypi":     "https://pypi.org",
+		"rubygems": "https://rubygems.org",
+		"swift":    "https://api.spm.swift.org",
+		"oci":      "https://registry-1.docker.io",
+	}
+	return m[format]
 }
 
 func (a *API) packageList(w http.ResponseWriter, r *http.Request) {
@@ -448,6 +476,26 @@ func (a *API) compactSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": res.OK})
+}
+
+// sessionSettings forwards PATCH /sessions/{id}/settings to the agent and
+// wraps the returned session in the recoder UI shape (org/repo/branch split
+// from the session name).
+func (a *API) sessionSettings(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	var res struct {
+		Session map[string]interface{} `json:"session"`
+	}
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPatch, "/api/v1/sessions/"+id+"/settings", body, nil, &res); err != nil {
+		badGateway(w, "agent", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"session": recSession(res.Session)})
 }
 
 // sessionPrompt forwards the prompt and synthesizes {ok, messageId}: the

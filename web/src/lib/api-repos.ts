@@ -142,7 +142,7 @@ export const providers = {
       z.object({ providers: ProvidersMapSchema }),
     ).map(r => r.providers),
   register: (p: Omit<ProviderInfo, 'api_key'> & { api_key: string }) =>
-    post(`/api/v1/providers/register`, p, OkSchema),
+    post(`/api/v1/providers`, p, OkSchema),
   delete: (pid: string) => del(`/api/v1/providers/${pid}`),
   test: (params: { api_type: string; base_url: string; api_key: string }) =>
     post(
@@ -161,6 +161,12 @@ export const models = {
   list: () =>
     get(
       `/api/v1/models`,
-      z.object({ models: z.array(ModelInfoSchema) }),
-    ).map(r => r.models),
+      z.object({
+        models: z.array(
+          ModelInfoSchema.extend({ provider_id: z.string().optional() }),
+        ),
+      }),
+    ).map(r =>
+      r.models.map(m => ({ ...m, provider_id: m.provider_id ?? '' })),
+    ),
 }

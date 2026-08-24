@@ -331,8 +331,7 @@ const filtered = $derived(
 										</Card.Description>
 									</Card.Header>
 									<Card.Content class="text-xs space-y-1.5 pt-1">
-										{#if t.upstream}
-											<div class="flex items-center gap-1.5">
+										{#if t.upstream}											<div class="flex items-center gap-1.5">
 												<ExternalLink class="size-3 shrink-0 text-muted-foreground" />
 												<span class="truncate font-mono text-muted-foreground"
 													>{t.upstream}</span

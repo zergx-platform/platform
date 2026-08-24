@@ -37,7 +37,7 @@ export const presets = {
 }
 
 export const tools = {
-  list: () => get(`/api/v1/tools`, z.array(ToolInfoSchema)),
+  list: () => get(`/api/v1/tools`, z.object({ tools: z.array(ToolInfoSchema) })).map(r => r.tools),
   getConfig: () =>
     get(`/api/v1/tool-config`, ToolConfigMapSchema),
   setConfig: (cfg: ToolConfigMap) =>
