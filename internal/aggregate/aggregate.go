@@ -818,7 +818,7 @@ func (a *API) cloneRepo(w http.ResponseWriter, r *http.Request) {
 
 // forkRepo: same-repo branch fork (source branch → target branch), workspace
 // session created eagerly. Cross-repo forks are not supported by jj
-// bookmark-from; rejected with a clear error.
+// POST /repos/{org}/{repo}/bookmarks; rejected with a clear error.
 func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		SourceOrg    string `json:"source_org"`
@@ -851,10 +851,9 @@ func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := map[string]interface{}{
-		"org": b.SourceOrg, "repo": b.SourceRepo,
-		"source_branch": b.SourceBranch, "new_branch": b.TargetBranch,
+		"rev": b.SourceBranch, "branch": b.TargetBranch,
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/bookmark-from", body, nil, nil); err != nil {
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/"+b.SourceOrg+"/"+b.SourceRepo+"/bookmarks", body, nil, nil); err != nil {
 		badGateway(w, "jj-server", err)
 		return
 	}

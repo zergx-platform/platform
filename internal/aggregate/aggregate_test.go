@@ -54,7 +54,7 @@ func newFakeBackends() *fakeBackends {
 	mux.HandleFunc("/api/v1/repos/ensure", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
-	mux.HandleFunc("/api/v1/repos/bookmark-from", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/repos/acme/api/bookmarks", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"ok":true,"branch":"dev"}`))
 	})
 	mux.HandleFunc("/api/v1/repos/acme/api/main/tree", func(w http.ResponseWriter, r *http.Request) {
