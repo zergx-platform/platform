@@ -108,7 +108,7 @@ func FromEnv(env func(string) string) *Upstreams {
 		Repo:     New(or("REPO_URL", "ZERGX_REPO_MANAGER_URL", "http://repo.zergx.svc.cluster.local:80")),
 		RepoExt:  New(or("REPOEXT_URL", "ZERGX_REPOEXT_URL", "http://repo-extension.zergx.svc.cluster.local:80")),
 		Ops:      New(or("OPS_URL", "ZERGX_EXECUTOR_URL", "http://ops-extension.zergx.svc.cluster.local:80")),
-		Artifact: New(or("ARTIFACT_URL", "ZERGX_ZOT_URL", "ZERGX_REGISTRY_URL", "http://rucoder-artifact.temp.10.199.64.20.nip.io:80")),
+		Artifact: New(or("ARTIFACT_URL", "ZERGX_ZOT_URL", "ZERGX_REGISTRY_URL", "http://artifact.zergx.svc.cluster.local:80")),
 		Browser:  New(or("BROWSER_URL", "ZERGX_BROWSER_URL", "http://browser-extension.zergx.svc.cluster.local:80")),
 		Memory:   New(or("MEMORY_URL", "ZERGX_MEMORY_URL", "http://memory-tools.zergx.svc.cluster.local:80")),
 	}

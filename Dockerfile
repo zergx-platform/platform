@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG REGISTRY=rucoder-artifact.temp.10.199.64.20.nip.io
+ARG REGISTRY=artifact.zergx.svc.cluster.local
 FROM ${REGISTRY}/library/node:26-alpine AS web
 ARG HTTP_PROXY=http://mihomo.develop.svc.cluster.local:7890
 ARG HTTPS_PROXY=http://mihomo.develop.svc.cluster.local:7890

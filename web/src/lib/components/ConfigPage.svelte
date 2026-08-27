@@ -153,7 +153,7 @@ async function refreshProviders() {
                             </div>
                         {/if}
                         <div><label class="text-sm font-medium" for="k8s_img">Worker Image</label>
-                            <input id="k8s_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="rucoder-artifact.temp.10.199.64.20.nip.io/zergx-worker:latest" value={values["worker_base_image"] || ""} oninput={(e) => values = { ...values, worker_base_image: e.currentTarget.value }} /></div>
+                            <input id="k8s_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="artifact.zergx.svc.cluster.local/zergx-worker:latest" value={values["worker_base_image"] || ""} oninput={(e) => values = { ...values, worker_base_image: e.currentTarget.value }} /></div>
                         <div><label class="text-sm font-medium" for="k8s_ns">Namespace</label>
                             <input id="k8s_ns" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="temp" value={values["k8s_namespace"] || ""} oninput={(e) => values = { ...values, k8s_namespace: e.currentTarget.value }} /></div>
                         <div><label class="text-sm font-medium" for="kube_cfg">Kubeconfig</label>
@@ -162,7 +162,7 @@ async function refreshProviders() {
                 {:else}
                     <div class="space-y-3">
                         <div><label class="text-sm font-medium" for="docker_img">Worker Image</label>
-                            <input id="docker_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="rucoder-artifact.temp.10.199.64.20.nip.io/zergx-worker:latest" value={values["worker_image"] || ""} oninput={(e) => values = { ...values, worker_image: e.currentTarget.value }} /></div>
+                            <input id="docker_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="artifact.zergx.svc.cluster.local/zergx-worker:latest" value={values["worker_image"] || ""} oninput={(e) => values = { ...values, worker_image: e.currentTarget.value }} /></div>
                         <div><label class="text-sm font-medium" for="docker_url">Docker API URL</label>
                             <input id="docker_url" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://podman.podman.svc.cluster.local:8080" value={values["docker_api_url"] || ""} oninput={(e) => values = { ...values, docker_api_url: e.currentTarget.value }} /></div>
                     </div>
