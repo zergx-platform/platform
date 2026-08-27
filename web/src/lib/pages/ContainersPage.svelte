@@ -25,6 +25,7 @@ import {
   X,
 } from '@lucide/svelte'
 import ConfirmDialog from '$lib/components/ConfirmDialog.svelte'
+import { openTaskStream, type TaskStreamLine } from '$lib/taskStream'
 import ContainerWorkspace from '$lib/components/ContainerWorkspace.svelte'
 import { Button } from '$lib/components/ui/button'
 import * as Card from '$lib/components/ui/card'
@@ -117,6 +118,8 @@ let showBuildWorker = $state(false)
 let buildBaseImage = $state('')
 let buildError = $state('')
 let building = $state(false)
+let buildLogs = $state<TaskStreamLine[]>([])
+let buildState = $state('')
 
 onMount(() => {
   loadAll()
@@ -152,18 +155,33 @@ async function onBuildWorker() {
   if (!buildBaseImage.trim()) return
   building = true
   buildError = ''
+  buildLogs = []
+  buildState = 'running'
   const r = await api.containers.buildImage({
     raw: true,
     dockerfile: `FROM ${buildBaseImage}\n`,
     tag: 'worker',
   })
-  if (r.isOk()) {
-    showBuildWorker = false
-    await loadAll()
-  } else {
+  if (r.isErr()) {
     buildError = r.error
+    building = false
+    return
   }
-  building = false
+  // Stream the background build task's log live instead of returning blind.
+  openTaskStream(r.value.build_id, {
+    onLog: lines => (buildLogs = [...buildLogs, ...lines]),
+    onState: st => (buildState = st),
+    onDone: done => {
+      building = false
+      buildState = done.state
+      if (done.state !== 'done' && done.error) buildError = done.error
+      if (done.state === 'done') setTimeout(() => { showBuildWorker = false; void loadAll() }, 800)
+    },
+    onError: msg => {
+      building = false
+      buildError = msg
+    },
+  })
 }
 
 async function onCreateContainer() {
@@ -481,11 +499,21 @@ function termContainer(): Sandbox | undefined {
                 <p class="text-xs text-destructive">{buildError}</p>
             {/if}
 
+            {#if building || buildLogs.length > 0}
+                <div class="rounded border border-border bg-muted/30 p-2 max-h-48 overflow-y-auto" aria-label="Build log">
+                    {#if buildState}<p class="text-[10px] text-muted-foreground mb-1 font-mono">state: {buildState}</p>{/if}
+                    {#each buildLogs as ln, i (i)}
+                        <pre class="text-[10px] leading-relaxed font-mono whitespace-pre-wrap {ln.stream === 'stderr' ? 'text-red-500' : ''}">{ln.line}</pre>
+                    {/each}
+                    {#if building}<div class="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-1"><Loader2 class="size-3 animate-spin" /> streaming build output…</div>{/if}
+                </div>
+            {/if}
+
             <div class="flex items-center gap-2 pt-1">
                 <Button size="sm" onclick={onBuildWorker} disabled={building || !buildBaseImage.trim()}>
                     {#if building}<Loader2 class="size-3.5 animate-spin mr-1" />{/if}Build
                 </Button>
-                <Button variant="ghost" size="sm" onclick={() => showBuildWorker = false}>Cancel</Button>
+                <Button variant="ghost" size="sm" onclick={() => showBuildWorker = false} disabled={building}>Cancel</Button>
             </div>
         </div>
     </div>

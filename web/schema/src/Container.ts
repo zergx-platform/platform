@@ -59,9 +59,7 @@ export type ContainerfileTemplate = z.infer<typeof ContainerfileTemplateSchema>
 
 export const ImageBuildResultSchema = z.object({
   ok: z.boolean(),
-  image_id: z.string().optional(),
-  image: z.string().optional(),
-  pushed: z.boolean().optional(),
+  build_id: z.string(),
 })
 export type ImageBuildResult = z.infer<typeof ImageBuildResultSchema>
 

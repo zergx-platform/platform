@@ -53,6 +53,7 @@ func main() {
 		pair{"/api/v1/deployments", up.Ops.Base},
 		pair{"/api/v1/infra", up.Ops.Base},
 		pair{"/api/v1/images", up.Ops.Base},
+		pair{"/api/v1/builds", up.Ops.Base}, // build/publish task status + SSE log stream
 		pair{"/api/v1/status", up.Ops.Base},
 		pair{"/api/v1/publish-specs", up.Ops.Base},
 		pair{"/api/v1/containerfile-templates", up.Ops.Base},

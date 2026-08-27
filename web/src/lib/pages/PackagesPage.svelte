@@ -20,6 +20,7 @@ import type { PackageTypeEntry, RucoderConfig } from '@rucoder/schema'
 import { onMount } from 'svelte'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'
+import { openTaskStream, type TaskStreamLine } from '$lib/taskStream'
 import * as Card from '$lib/components/ui/card'
 
 // ── State ──────────────────────────────────────────────
@@ -98,6 +99,8 @@ let publishRepo = $state('')
 let publishBookmark = $state('')
 let publishFile = $state('')
 let publishing = $state(false)
+let publishLogs = $state<TaskStreamLine[]>([])
+let publishState = $state('')
 let publishError = $state('')
 
 async function openPublish() {
@@ -105,6 +108,9 @@ async function openPublish() {
   const r = await api.containers.publishSpecs()
   publishSpecs = r.isOk() ? r.value : []
   publishProtocol = ''
+  publishLogs = []
+  publishState = ''
+  publishError = ''
   showPublish = true
 }
 
@@ -126,13 +132,26 @@ async function onPublish() {
     file: publishFile,
     dockerfile_path: '',
   })
-  if (r.isOk()) {
-    showPublish = false
-    await loadAll()
-  } else {
+  if (r.isErr()) {
     publishError = r.error
+    publishing = false
+    return
   }
-  publishing = false
+  // Stream the publish task's log live (same build-task SSE channel).
+  openTaskStream(r.value.build_id, {
+    onLog: lines => (publishLogs = [...publishLogs, ...lines]),
+    onState: st => (publishState = st),
+    onDone: done => {
+      publishing = false
+      publishState = done.state
+      if (done.state !== 'done' && done.error) publishError = done.error
+      if (done.state === 'done') setTimeout(() => { showPublish = false; void loadAll() }, 800)
+    },
+    onError: msg => {
+      publishing = false
+      publishError = msg
+    },
+  })
 }
 
 async function loadAll() {
@@ -786,6 +805,16 @@ const filtered = $derived(
 
 			{#if publishError}
 				<p class="text-xs text-destructive">{publishError}</p>
+			{/if}
+
+			{#if publishing || publishLogs.length > 0}
+				<div class="rounded border border-border bg-muted/30 p-2 max-h-48 overflow-y-auto" aria-label="Publish log">
+					{#if publishState}<p class="text-[10px] text-muted-foreground mb-1 font-mono">state: {publishState}</p>{/if}
+					{#each publishLogs as ln, i (i)}
+						<pre class="text-[10px] leading-relaxed font-mono whitespace-pre-wrap {ln.stream === 'stderr' ? 'text-red-500' : ''}">{ln.line}</pre>
+					{/each}
+					{#if publishing}<div class="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-1"><Loader2 class="size-3 animate-spin" /> streaming publish output…</div>{/if}
+				</div>
 			{/if}
 
 			<div class="flex items-center gap-2 pt-1">

@@ -80,13 +80,26 @@ $effect(() => {
     return
   }
   const hook = createMessages(() => store.activeSessionId ?? sid)
+  // Todos refresh on demand: the memory extension publishes todos-updated
+  // onto the session event stream whenever todowrite lands (no more 5s
+  // polling), plus a refresh when a turn settles for good measure.
+  const offTodos = hook.onSessionEvent((event, params) => {
+    if (event === 'todos-updated' || event === 'turn-complete') {
+      void loadTodos(sid)
+    }
+    void params
+  })
   hook.init().then(cleanup => {
     msgHook = hook
     // store cleanup for later session switch
-    ;(hook as unknown as { _cleanup?: () => void })._cleanup = cleanup
+    ;(hook as unknown as { _cleanup?: () => void })._cleanup = () => {
+      cleanup()
+      offTodos()
+    }
   })
   return () => {
     const c = (hook as unknown as { _cleanup?: () => void })._cleanup
+    offTodos()
     if (c) c()
   }
 })
@@ -116,8 +129,6 @@ $effect(() => {
     return
   }
   void loadTodos(sid)
-  const timer = setInterval(() => void loadTodos(sid), 5000)
-  return () => clearInterval(timer)
 })
 
 $effect(() => {

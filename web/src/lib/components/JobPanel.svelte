@@ -38,7 +38,9 @@ type StreamState = {
   done: boolean
 }
 let modalStreams = $state<Record<string, Record<string, StreamState>>>({})
-let modalPollers = new Map<string, ReturnType<typeof setInterval>>()
+// Live job output: one SSE per open modal (worker replays history then
+// streams job.output/job.completed events). Replaces 1s HTTP polling.
+let modalSources = new Map<string, EventSource>()
 
 let sortedJobs = $derived(
   [...jobs].sort((a, b) => {
@@ -70,9 +72,12 @@ async function openModal(j: JobInfo) {
   modalJob = j
   modalStream = 'all'
   modalFilter = ''
-  if (!modalStreams[j.id]) modalStreams[j.id] = {}
+  // Seed per-stream buffers from the worker's snapshot (the SSE replay
+  // covers only the last 100 rows; older history back-fills on demand).
+  modalStreams[j.id] = {}
+  const seed: Record<string, StreamState> = {}
   for (const s of ['all', 'stdout', 'stderr']) {
-    modalStreams[j.id][s] = {
+    seed[s] = {
       lines: [],
       firstLine: 0,
       lastLine: -1,
@@ -81,7 +86,7 @@ async function openModal(j: JobInfo) {
     }
     const r = await fetchOutput(j.id, s, -200, -1)
     if (r)
-      modalStreams[j.id][s] = {
+      seed[s] = {
         lines: r.lines,
         firstLine: r.start_line,
         lastLine: r.end_line,
@@ -89,54 +94,69 @@ async function openModal(j: JobInfo) {
         done: r.done,
       }
   }
-  startPolling(j.id)
+  modalStreams[j.id] = seed
+  startStream(j.id)
 }
 
 function closeModal() {
   modalJob = null
-  for (const [jid, pid] of modalPollers) {
-    clearInterval(pid)
-    modalPollers.delete(jid)
+  for (const [jid, es] of modalSources) {
+    es.close()
+    modalSources.delete(jid)
   }
 }
 
-function startPolling(jid: string) {
-  if (modalPollers.has(jid)) return
-  const pid = setInterval(async () => {
-    const j = jobs.find(j => j.id === jid)
-    if (!j) {
-      clearInterval(pid)
-      modalPollers.delete(jid)
-      return
-    }
-    for (const s of ['all', 'stdout', 'stderr'] as const) {
-      const st = modalStreams[jid]?.[s]
-      if (!st || st.done) continue
-      const mj = modalStreams[jid]
-      if (!mj) continue
-      const r = await fetchOutput(jid, s, st.lastLine + 1, -1)
-      if (!r) continue
-      if (r.lines.length > 0) {
-        mj[s] = {
-          ...st,
-          lines: [...st.lines, ...r.lines],
-          lastLine: r.end_line,
-          totalLines: r.total_lines,
-          done: r.done,
-        }
-      } else if (r.done) {
-        mj[s] = { ...st, done: true }
+function startStream(jid: string) {
+  if (modalSources.has(jid)) return
+  const es = new EventSource(
+    `/api/v1/sandboxes/${encodeURIComponent(containerId)}/ws/job?job_id=${encodeURIComponent(jid)}`,
+  )
+  modalSources.set(jid, es)
+
+  const append = (stream: string, content: string) => {
+    const mj = modalStreams[jid]
+    if (!mj) return
+    const parts = content.split('\n')
+    if (parts.length > 0 && parts[parts.length - 1] === '') parts.pop()
+    if (parts.length === 0) return
+    const bump = (st: StreamState): StreamState => ({
+      ...st,
+      lines: [...st.lines, ...parts.map((p, i) => (i === parts.length - 1 ? p + '\n' : p))],
+      lastLine: st.lastLine + parts.length,
+      totalLines: st.lastLine + parts.length + 1,
+    })
+    mj[stream] = bump(mj[stream])
+    if (stream !== 'all') mj.all = bump(mj.all)
+  }
+
+  es.addEventListener('job.output', e => {
+    try {
+      const ev = JSON.parse((e as MessageEvent).data) as {
+        stream: string
+        content: string
       }
+      append(ev.stream, ev.content)
+    } catch {
+      // ignore malformed frames
     }
-    const allDone = ['all', 'stdout', 'stderr'].every(
-      s => modalStreams[jid]?.[s]?.done,
-    )
-    if (allDone || j.state !== 'running') {
-      clearInterval(pid)
-      modalPollers.delete(jid)
-    }
-  }, 1000)
-  modalPollers.set(jid, pid)
+  })
+  es.addEventListener('job.completed', () => {
+    const mj = modalStreams[jid]
+    if (mj)
+      for (const s of ['all', 'stdout', 'stderr'] as const) {
+        if (mj[s]) mj[s] = { ...mj[s], done: true }
+      }
+    void pollJobs()
+  })
+  es.onerror = () => {
+    // Server closes the stream when the worker goes away; mark buffers
+    // done so the UI stops showing the live ellipsis.
+    const mj = modalStreams[jid]
+    if (mj)
+      for (const s of ['all', 'stdout', 'stderr'] as const) {
+        if (mj[s]) mj[s] = { ...mj[s], done: true }
+      }
+  }
 }
 
 async function modalLoadMore() {
@@ -174,7 +194,7 @@ onMount(() => {
 })
 
 onDestroy(() => {
-  for (const pid of modalPollers.values()) clearInterval(pid)
+  for (const es of modalSources.values()) es.close()
 })
 
 async function pollJobs() {

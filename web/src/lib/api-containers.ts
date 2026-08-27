@@ -135,7 +135,7 @@ export const containers = {
     version: string
     file: string
     dockerfile_path: string
-  }) => post(`/api/v1/packages/publish`, body, z.object({ ok: z.boolean() })),
+  }) => post(`/api/v1/packages/publish`, body, ImageBuildResultSchema),
 
   jobs: (session: string) =>
     get(

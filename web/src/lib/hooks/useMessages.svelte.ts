@@ -17,6 +17,9 @@ export function createMessages(sessionId: () => string) {
 
   let mountId = 0
   let eventSource: EventSource | null = null
+  // Side-channel listeners for session events the chat itself does not
+  // render (todos-updated, …) — lets pages drop their own polling loops.
+  const sessionEventListeners = new Set<(event: string, params: Record<string, unknown>) => void>()
   let streamingId = $state<string | null>(null)
   let nextSeq = 1000000
 
@@ -339,8 +342,16 @@ export function createMessages(sessionId: () => string) {
       case 'tool-input-end':
         // no-op boundaries
         break
-      default:
+      default: {
+        for (const cb of sessionEventListeners) {
+          try {
+            cb(ev.event, (ev.params ?? {}) as Record<string, unknown>)
+          } catch {
+            // listener errors must not break the stream pump
+          }
+        }
         break
+      }
     }
   }
 
@@ -499,7 +510,15 @@ export function createMessages(sessionId: () => string) {
     void fetchMessages()
   }
 
+  function onSessionEvent(
+    cb: (event: string, params: Record<string, unknown>) => void,
+  ): () => void {
+    sessionEventListeners.add(cb)
+    return () => sessionEventListeners.delete(cb)
+  }
+
   return {
+    onSessionEvent,
     get messages() {
       return sortedMsgs
     },
