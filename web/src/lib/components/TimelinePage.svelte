@@ -13,13 +13,15 @@ let changes = $state<ChangeEntry[]>([])
 
 $effect(() => {
   const sid = store.activeSessionId
+  const rev = store.sessionRevision // turn settles -> refetch
   if (!sid) {
     changes = []
     return
   }
   void api.sessions.changes(sid).then(r => {
-    changes = r.isOk() ? r.value : []
+    if (r.isOk()) changes = r.value
   })
+  void rev
 })
 </script>
 

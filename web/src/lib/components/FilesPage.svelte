@@ -4,6 +4,15 @@ import { getStore } from '$lib/stores.svelte'
 
 const store = getStore()
 
+// After a turn settles the agent may have written files: drop the stale
+// tree cache so the next expansion fetches fresh entries.
+$effect(() => {
+  const rev = store.sessionRevision
+  if (rev > 0 && !store.selectedFilePath && !store.activeDiffChangeId) {
+    void store.refreshFileTree()
+  }
+})
+
 import { Button } from '$lib/components/ui/button'
 import CodeView from './CodeView.svelte'
 import DiffView from './DiffView.svelte'

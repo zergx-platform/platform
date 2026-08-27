@@ -32,6 +32,8 @@ type StoreState = {
   selectedFilePath: string | null
   fileContent: string
   codeLoading: boolean
+  /** Bumped when a session turn settles; side panels refetch on change. */
+  sessionRevision: number
   showFork: boolean
   forkTargetId: string | null
   fileHistory: FileCommit[]
@@ -59,6 +61,8 @@ export type Store = StoreState & {
   deleteRepo(org: string, repo: string): Promise<void>
   deleteOrg(org: string): Promise<void>
   openRepo(org: string, repo: string, branch?: string): Promise<void>
+  bumpSessionRevision(): void
+  refreshFileTree(): Promise<void>
   toggleDir(dir: string): Promise<void>
   openFile(p: string): Promise<void>
   openFileFromUrl(path: string, changeId?: string): Promise<void>
@@ -103,6 +107,7 @@ export function createStore(initTheme?: string): Store {
     selectedFilePath: null,
     fileContent: '',
     codeLoading: false,
+    sessionRevision: 0,
     showFork: false,
     forkTargetId: null,
     fileHistory: [],
@@ -267,7 +272,19 @@ export function createStore(initTheme?: string): Store {
     set fileContent(v: string) {
       state.fileContent = v
     },
-    get codeLoading() {
+    get sessionRevision() {
+    return state.sessionRevision
+  },
+  bumpSessionRevision(): void {
+    state.sessionRevision += 1
+  },
+  /** Drop the cached file tree and reload the root (after agent writes). */
+  async refreshFileTree(): Promise<void> {
+    if (!state.codeOrg || !state.codeRepo) return
+    state.treeCache = {}
+    await loadTreeDir('')
+  },
+  get codeLoading() {
       return state.codeLoading
     },
     set codeLoading(v: boolean) {

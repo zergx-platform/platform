@@ -12,6 +12,7 @@ import {
   CircleCheck,
   CircleDot,
   Folder,
+  GitBranch,
   GitCommit,
   Inbox,
   Layers,
@@ -20,6 +21,7 @@ import {
   Send,
   Settings,
   Square,
+  SquareTerminal,
   Terminal,
   X,
 } from '@lucide/svelte'
@@ -86,6 +88,11 @@ $effect(() => {
   const offTodos = hook.onSessionEvent((event, params) => {
     if (event === 'todos-updated' || event === 'turn-complete') {
       void loadTodos(sid)
+    }
+    if (event === 'turn-complete') {
+      // The turn may have produced commits/file writes: timeline, mailbox
+      // and the workspace file tree refetch on the next read.
+      store.bumpSessionRevision()
     }
     void params
   })
@@ -198,6 +205,19 @@ const tokensLabel = $derived.by(() => {
   if (totalTokens < 1000) return `${totalTokens}`
   return `${(totalTokens / 1000).toFixed(1)}k`
 })
+
+const overlayTabs = [
+  { id: 'timeline', label: 'Timeline', icon: GitBranch },
+  { id: 'files', label: 'Files', icon: Folder },
+  { id: 'container', label: 'Container', icon: SquareTerminal },
+  { id: 'todos', label: 'Todos', icon: ListTodo },
+  { id: 'mailbox', label: 'Mailbox', icon: Inbox },
+] as const
+
+function toggleOverlay(id: (typeof overlayTabs)[number]['id']): void {
+  if (store.sessionOverlay === id) store.closeOverlay()
+  else store.openOverlay(id)
+}
 
 const overlayTitle = $derived.by(() => {
   switch (store.sessionOverlay) {
@@ -623,9 +643,20 @@ async function compact() {
         {#if store.sessionOverlay}
             <!-- Desktop: side panel next to chat -->
             <div class="hidden lg:flex shrink-0 w-[480px] max-w-[55%] border-l border-border bg-background flex-col">
-                <div class="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
-                    <span class="text-sm font-medium truncate">{overlayTitle}</span>
-                    <Button variant="ghost" size="icon-sm" class="size-6 ml-auto shrink-0" title="Close" onclick={() => store.closeOverlay()}>
+                <div class="flex items-center gap-0.5 border-b border-border px-2 py-1.5 shrink-0" role="tablist" aria-label="Session panels">
+                    {#each overlayTabs as tab (tab.id)}
+                        <button
+                            role="tab"
+                            aria-selected={store.sessionOverlay === tab.id}
+                            title={store.sessionOverlay === tab.id ? `Close ${tab.label}` : tab.label}
+                            class="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] transition-colors {store.sessionOverlay === tab.id ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}"
+                            onclick={() => toggleOverlay(tab.id)}
+                        >
+                            <tab.icon class="size-3.5 shrink-0" />
+                            <span class="hidden xl:inline">{tab.label}</span>
+                        </button>
+                    {/each}
+                    <Button variant="ghost" size="icon-sm" class="size-6 ml-auto shrink-0" title="Close panel" onclick={() => store.closeOverlay()}>
                         <X class="size-3.5" />
                     </Button>
                 </div>
@@ -679,6 +710,9 @@ async function compact() {
                         </div>
                     {:else if store.sessionOverlay === 'todos'}
                         <div class="overflow-y-auto p-3 space-y-1">
+                            {#if todos.length === 0}
+                                <p class="text-xs text-muted-foreground text-center py-6">No todos yet — the agent tracks its plan here via <span class="font-mono">todowrite</span>.</p>
+                            {/if}
                             {#each todos as t (t.id)}
                                 <div class="flex items-start gap-2 text-xs px-1 py-1.5 rounded hover:bg-accent/40">
                                     {#if t.status === 'completed'}
@@ -750,6 +784,9 @@ async function compact() {
                         </div>
                     {:else if store.sessionOverlay === 'todos'}
                         <div class="overflow-y-auto p-3 space-y-1">
+                            {#if todos.length === 0}
+                                <p class="text-xs text-muted-foreground text-center py-6">No todos yet — the agent tracks its plan here via <span class="font-mono">todowrite</span>.</p>
+                            {/if}
                             {#each todos as t (t.id)}
                                 <div class="flex items-start gap-2 text-xs px-1 py-1.5 rounded hover:bg-accent/40">
                                     {#if t.status === 'completed'}
