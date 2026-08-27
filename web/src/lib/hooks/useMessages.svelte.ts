@@ -504,6 +504,11 @@ export function createMessages(sessionId: () => string) {
 
   async function revert(messageId: string): Promise<void> {
     const current = sortedMsgs
+    // Interrupt any in-flight turn first so a mid-stream undo cannot race a
+    // socketed/stale result back into the message list after the tip moved.
+    if (sending) {
+      await api.sessions.interrupt(sessionId())
+    }
     await api.sessions.revert(sessionId(), messageId)
     const idx = current.findIndex(m => m.id === messageId)
     const keep = idx >= 0 ? current.slice(0, idx) : current
