@@ -21,9 +21,9 @@ const pwa = getPwaStore()
             {#if pwa.installed}
                 Running in standalone mode. The shortcut is on your home screen.
             {:else if pwa.canInstall}
-                Installing adds ReCoder to your home screen for a full-screen, app-like experience.
+                Installing adds ZergX to your home screen for a full-screen, app-like experience.
             {:else}
-                Install ReCoder as a standalone app for a full-screen, app-like experience.
+                Install ZergX as a standalone app for a full-screen, app-like experience.
             {/if}
         </p>
         {#if pwa.installed}

@@ -240,7 +240,7 @@ async function refreshProviders() {
 
                 <div class="text-xs text-muted-foreground mt-6 px-1 flex items-center gap-1">
                     <Layers class="size-3" />
-                    ReCoder · {VERSION}
+                    ZergX · {VERSION}
                 </div>
             {/if}
         </div>

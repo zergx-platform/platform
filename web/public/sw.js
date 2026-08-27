@@ -1,4 +1,4 @@
-const CACHE = 'recoder-static-v2'
+const CACHE = 'zergx-static-v1'
 
 self.addEventListener('install', event => {
   self.skipWaiting()

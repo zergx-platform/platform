@@ -1,6 +1,6 @@
 {
-  "name": "ReCoder",
-  "short_name": "ReCoder",
+  "name": "ZergX",
+  "short_name": "ZergX",
   "description": "AI coding platform: sessions, repos, sandboxes and package registry",
   "start_url": "/#/chat",
   "scope": "/",
