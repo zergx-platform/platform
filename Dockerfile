@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 ARG REGISTRY=rucoder-artifact.temp.10.199.64.20.nip.io
-FROM ${REGISTRY}/node:26-alpine AS web
+FROM ${REGISTRY}/library/node:26-alpine AS web
 ARG HTTP_PROXY=http://mihomo.develop.svc.cluster.local:7890
 ARG HTTPS_PROXY=http://mihomo.develop.svc.cluster.local:7890
 ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY} \
@@ -14,7 +14,7 @@ COPY web/index.html web/vite.config.ts web/tsconfig.json ./
 COPY web/schema schema
 RUN npm run build
 
-FROM ${REGISTRY}/golang:1.26-alpine AS build
+FROM ${REGISTRY}/library/golang:1.26-alpine AS build
 ARG HTTP_PROXY=http://mihomo.develop.svc.cluster.local:7890
 ARG HTTPS_PROXY=http://mihomo.develop.svc.cluster.local:7890
 ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY} \
@@ -33,7 +33,7 @@ COPY --from=web /web/dist web/dist
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -o /out/gateway-go ./cmd/gateway
 
-FROM ${REGISTRY}/alpine:3.24
+FROM ${REGISTRY}/library/alpine:3.24
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/gateway-go /usr/local/bin/gateway-go
 ENV RUCODER_PORT=8080
