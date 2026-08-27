@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -167,7 +168,7 @@ func (a *API) packageList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) packageVersions(w http.ResponseWriter, r *http.Request) {
-	typ, name := chi.URLParam(r, "type"), chi.URLParam(r, "name")
+	typ, name := pathParam(r, "type"), pathParam(r, "name")
 	pkgs, err := a.fetchPackages(r.Context())
 	if err != nil {
 		badGateway(w, "artifact", err)
@@ -192,7 +193,7 @@ func (a *API) packageVersions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) packageDelete(w http.ResponseWriter, r *http.Request) {
-	typ, name := chi.URLParam(r, "type"), chi.URLParam(r, "name")
+	typ, name := pathParam(r, "type"), pathParam(r, "name")
 	repo := name
 	if typ == "oci" || typ == "generic" {
 		// repo keys may carry namespaces verbatim; no transformation
@@ -234,6 +235,39 @@ func parseTriple(name string) (org, repo, branch string, ok bool) {
 		return "", "", "", false
 	}
 	return parts[0], parts[1], parts[2], true
+}
+
+// pathParam decodes a chi URL parameter. chi hands back the raw (still
+// percent-encoded) segment, while the UI encodes session ids and package
+// names with encodeURIComponent — so every consumer must decode before
+// matching, splitting or re-forwarding. The old code compared/forwarded the
+// escaped form, which broke every id containing ':' (session timelines,
+// todos, fork) and any package name containing '@' or '/'.
+func pathParam(r *http.Request, key string) string {
+	v := chi.URLParam(r, key)
+	if u, err := url.PathUnescape(v); err == nil {
+		return u
+	}
+	return v
+}
+
+// sessPath builds a downstream agent path with the id safely (re-)escaped
+// exactly once.
+func sessPath(id, suffix string) string {
+	return "/api/v1/sessions/" + url.PathEscape(id) + suffix
+}
+
+// qOpt builds query values, skipping pairs with empty values. An empty
+// `limit=`/`before=` is not "unset" to a strict downstream validator: it
+// fails number coercion and the route silently returns zero messages.
+func qOpt(kv ...string) url.Values {
+	q := url.Values{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i+1] != "" {
+			q.Set(kv[i], kv[i+1])
+		}
+	}
+	return q
 }
 
 // recSession maps an agent session row into the UI Session shape, filling
@@ -374,8 +408,8 @@ func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 // adoptSession: clicking an unbound bookmark in the UI binds it to a
 // (created) workspace session via repo-extension's adoption endpoint.
 func (a *API) adoptSession(w http.ResponseWriter, r *http.Request) {
-	org, repo, bm := chi.URLParam(r, "org"), chi.URLParam(r, "repo"), chi.URLParam(r, "bm")
-	path := "/api/v1/repos/" + org + "/" + repo + "/bookmarks/" + bm + "/session"
+	org, repo, bm := pathParam(r, "org"), pathParam(r, "repo"), pathParam(r, "bm")
+	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/bookmarks/" + url.PathEscape(bm) + "/session"
 	var res map[string]interface{}
 	if err := a.Up.RepoExt.JSON(r.Context(), http.MethodPost, path, nil, nil, &res); err != nil {
 		badGateway(w, "repo-extension", err)
@@ -442,7 +476,7 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := pathParam(r, "id")
 	var b struct {
 		Branch string `json:"branch"`
 	}
@@ -460,7 +494,7 @@ func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := org + ":" + repo + ":" + b.Branch
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, "/api/v1/sessions/"+id+"/fork", map[string]interface{}{"name": name}, nil, nil); err != nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, sessPath(id, "/fork"), map[string]interface{}{"name": name}, nil, nil); err != nil {
 		badGateway(w, "agent", err)
 		return
 	}
@@ -469,11 +503,11 @@ func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
 
 // compactSession forwards a manual compaction request to the agent.
 func (a *API) compactSession(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := pathParam(r, "id")
 	var res struct {
 		OK bool `json:"ok"`
 	}
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, "/api/v1/sessions/"+id+"/compact", nil, nil, &res); err != nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, sessPath(id, "/compact"), nil, nil, &res); err != nil {
 		badGateway(w, "agent", err)
 		return
 	}
@@ -484,7 +518,7 @@ func (a *API) compactSession(w http.ResponseWriter, r *http.Request) {
 // wraps the returned session in the recoder UI shape (org/repo/branch split
 // from the session name).
 func (a *API) sessionSettings(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := pathParam(r, "id")
 	var body map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
@@ -493,7 +527,7 @@ func (a *API) sessionSettings(w http.ResponseWriter, r *http.Request) {
 	var res struct {
 		Session map[string]interface{} `json:"session"`
 	}
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodPatch, "/api/v1/sessions/"+id+"/settings", body, nil, &res); err != nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPatch, sessPath(id, "/settings"), body, nil, &res); err != nil {
 		badGateway(w, "agent", err)
 		return
 	}
@@ -504,7 +538,7 @@ func (a *API) sessionSettings(w http.ResponseWriter, r *http.Request) {
 // agent only replies {ok}; the UI needs the id to swap its optimistic
 // pending user message.
 func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := pathParam(r, "id")
 	var b struct {
 		Prompt string `json:"prompt"`
 	}
@@ -512,7 +546,7 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "prompt required")
 		return
 	}
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, "/api/v1/sessions/"+id+"/prompt", b, nil, nil); err != nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, sessPath(id, "/prompt"), b, nil, nil); err != nil {
 		badGateway(w, "agent", err)
 		return
 	}
@@ -525,7 +559,7 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 		} `json:"messages"`
 	}
 	messageId := ""
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, "/api/v1/sessions/"+id+"/messages", nil, upstream.Q("limit", "10"), &msgs); err == nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, sessPath(id, "/messages"), nil, upstream.Q("limit", "10"), &msgs); err == nil {
 		// messages come newest-first; the first user row is this prompt
 		for _, m := range msgs.Messages {
 			if m.Role == "user" {
@@ -540,8 +574,8 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 // listMessages adapts agent message rows into the UI Message shape with
 // parts built from role/content/tool_name.
 func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	q := upstream.Q("limit", r.URL.Query().Get("limit"), "before", r.URL.Query().Get("before"))
+	id := pathParam(r, "id")
+	q := qOpt("limit", r.URL.Query().Get("limit"), "before", r.URL.Query().Get("before"))
 	var res struct {
 		Messages []struct {
 			ID        string `json:"id"`
@@ -551,7 +585,7 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 			CreatedAt string `json:"created_at"`
 		} `json:"messages"`
 	}
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, "/api/v1/sessions/"+id+"/messages", nil, q, &res); err != nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, sessPath(id, "/messages"), nil, q, &res); err != nil {
 		badGateway(w, "agent", err)
 		return
 	}
@@ -590,7 +624,7 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 // timestamp/message), newest first.
 func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := chi.URLParam(r, "id")
+	id := pathParam(r, "id")
 	var m map[string]interface{}
 	if err := a.Up.RepoExt.JSON(ctx, http.MethodGet, "/api/v1/session-map", nil, upstream.Q("session", id), &m); err != nil {
 		badGateway(w, "repo-extension", err)
@@ -635,7 +669,7 @@ func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) sessionTodos(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	id := pathParam(r, "id")
 	var res map[string]interface{}
 	if err := a.Up.Memory.JSON(r.Context(), http.MethodGet, "/api/v1/todos", nil, upstream.Q("session_id", id), &res); err != nil {
 		badGateway(w, "memory-tools", err)

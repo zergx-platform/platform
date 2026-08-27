@@ -372,3 +372,142 @@ func TestValidComponentRules(t *testing.T) {
 		}
 	}
 }
+
+// TestEscapedSessionIDsForwardDecoded pins the UI's encodeURIComponent'd
+// session ids: chi returns the raw %3A segment, so the gateway must decode
+// before matching/re-forwarding. Before the fix, timelines failed with a
+// double-encoded session-map lookup, todos read a stale key that never
+// matched the NATS-written rows, and fork always rejected the name.
+func TestEscapedSessionIDsForwardDecoded(t *testing.T) {
+	var agentPath, agentQuery, mapSession, todoSession string
+
+	agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		agentPath = r.URL.EscapedPath()
+		agentQuery = r.URL.RawQuery
+		if strings.HasSuffix(r.URL.Path, "/messages") {
+			_, _ = w.Write([]byte(`{"messages":[
+				{"id":"m1","role":"user","content":"hi","tool_name":"","created_at":"2026-01-01"},
+				{"id":"m2","role":"assistant","content":"ok","tool_name":"","created_at":"2026-01-01"}
+			]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer agent.Close()
+
+	repoExt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mapSession = r.URL.Query().Get("session")
+		_, _ = w.Write([]byte(`{"org":"acme","repo":"api","bookmark":"main"}`))
+	}))
+	defer repoExt.Close()
+
+	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"commits":[
+			{"change_id":"c2","commit_id":"k2","author":"a","timestamp":"t","message":"work"},
+			{"change_id":"c1","commit_id":"k1","author":"a","timestamp":"t","message":"initial commit"}
+		]}`))
+	}))
+	defer repo.Close()
+
+	memory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		todoSession = r.URL.Query().Get("session_id")
+		_, _ = w.Write([]byte(`{"todos":[{"id":"1","content":"x"}]}`))
+	}))
+	defer memory.Close()
+
+	h := Router(&API{Up: &upstream.Upstreams{
+		Agent:   upstream.New(agent.URL),
+		Repo:    upstream.New(repo.URL),
+		RepoExt: upstream.New(repoExt.URL),
+		Ops:     upstream.New(repoExt.URL),
+		Memory:  upstream.New(memory.URL),
+	}})
+
+	// messages: no limit/before provided — the forwarded query must be EMPTY
+	// (an explicit `limit=` made the agent coerce NaN and return zero rows),
+	// and the id must survive as exactly one level of escaping.
+	code, v := do(t, h, "GET", "/sessions/acme%3Aapi%3Amain/messages", "")
+	if code != 200 {
+		t.Fatalf("messages code=%d", code)
+	}
+	if n := len(v["messages"].([]interface{})); n != 2 {
+		t.Fatalf("messages n=%d (empty-string query bug)", n)
+	}
+	if agentQuery != "" {
+		t.Fatalf("forwarded query %q, want empty (no limit=/before= keys)", agentQuery)
+	}
+	if dec, err := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(agentPath, "/api/v1/sessions/"), "/messages")); err != nil || dec != "acme:api:main" {
+		t.Fatalf("agent path %q does not carry the id exactly once", agentPath)
+	}
+
+	// changes: repo-extension must receive the DECODED session name once.
+	code, v = do(t, h, "GET", "/sessions/acme%3Aapi%3Amain/changes", "")
+	if code != 200 {
+		t.Fatalf("changes code=%d (%v)", code, v)
+	}
+	if mapSession != "acme:api:main" {
+		t.Fatalf("session-map forwarded %q, want acme:api:main (single decode)", mapSession)
+	}
+	if n := len(v["changes"].([]interface{})); n != 1 {
+		t.Fatalf("changes n=%d", n)
+	}
+
+	// todos: memory must be queried with the decoded key that matches the
+	// NATS-written rows.
+	code, _ = do(t, h, "GET", "/sessions/acme%3Aapi%3Amain/todos", "")
+	if code != 200 || todoSession != "acme:api:main" {
+		t.Fatalf("todos code=%d session=%q", code, todoSession)
+	}
+
+	// fork: parseTriple needs the decoded name; the agent call must carry
+	// the id exactly once.
+	code, _ = do(t, h, "POST", "/sessions/acme%3Aapi%3Amain/fork", `{"branch":"dev2"}`)
+	if code != 200 {
+		t.Fatalf("fork with escaped id code=%d (was always 400 before decode)", code)
+	}
+	if dec, err := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(agentPath, "/api/v1/sessions/"), "/fork")); err != nil || dec != "acme:api:main" {
+		t.Fatalf("agent fork path %q malformed", agentPath)
+	}
+}
+
+// TestPackageRoutesAcceptEscapedNames pins scoped package names
+// (encodeURIComponent turns '@'/'/' into %40/%2F): matching and forwarding
+// must happen on the decoded name.
+func TestPackageRoutesAcceptEscapedNames(t *testing.T) {
+	var deletedRepo string
+	artifact := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pkgs/system/packages" {
+			switch r.Method {
+			case http.MethodDelete:
+				deletedRepo = r.URL.Query().Get("repo")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+				return
+			default:
+				_, _ = w.Write([]byte(`{"packages":[
+					{"format":"npm","repository":"@bazel/runfiles","versions":["6.5.0"]}
+				]}`))
+				return
+			}
+		}
+		http.NotFound(w, r)
+	}))
+	defer artifact.Close()
+
+	h := Router(&API{Up: &upstream.Upstreams{
+		Artifact: upstream.New(artifact.URL),
+	}})
+
+	code, v := do(t, h, "GET", "/packages/npm/%40bazel%2Frunfiles/versions", "")
+	if code != 200 {
+		t.Fatalf("versions code=%d (%v) — scoped name must be decoded before matching", code, v)
+	}
+	data := v["data"].(map[string]interface{})
+	if data["name"] != "@bazel/runfiles" {
+		t.Fatalf("name=%v", data["name"])
+	}
+
+	code, _ = do(t, h, "DELETE", "/packages/npm/%40bazel%2Frunfiles", "")
+	if code != 200 || deletedRepo != "@bazel/runfiles" {
+		t.Fatalf("delete code=%d repo=%q", code, deletedRepo)
+	}
+}
