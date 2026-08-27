@@ -4,12 +4,15 @@ import { getStore } from '$lib/stores.svelte'
 
 const store = getStore()
 
-// After a turn settles the agent may have written files: drop the stale
-// tree cache so the next expansion fetches fresh entries.
+// After the agent writes files (mid-turn tool-results or turn-complete
+// bump sessionRevision): drop the stale tree cache so the next expansion
+// fetches fresh entries. Debounced to coalesce write bursts.
+let treeRefreshTimer: ReturnType<typeof setTimeout> | undefined
 $effect(() => {
   const rev = store.sessionRevision
   if (rev > 0 && !store.selectedFilePath && !store.activeDiffChangeId) {
-    void store.refreshFileTree()
+    clearTimeout(treeRefreshTimer)
+    treeRefreshTimer = setTimeout(() => void store.refreshFileTree(), 500)
   }
 })
 

@@ -238,6 +238,15 @@ export function createMessages(sessionId: () => string) {
 
   function handleEvent(ev: StreamEvent): void {
     const { event, params } = ev
+    // Side-channel listeners see EVERY event (todos-updated, tool-result
+    // with change_id, status, …) so panels can react mid-turn.
+    for (const cb of sessionEventListeners) {
+      try {
+        cb(ev.event, (ev.params ?? {}) as Record<string, unknown>)
+      } catch {
+        // listener errors must not break the stream pump
+      }
+    }
     switch (event) {
       case 'step-start':
       case 'text-start':
@@ -342,16 +351,8 @@ export function createMessages(sessionId: () => string) {
       case 'tool-input-end':
         // no-op boundaries
         break
-      default: {
-        for (const cb of sessionEventListeners) {
-          try {
-            cb(ev.event, (ev.params ?? {}) as Record<string, unknown>)
-          } catch {
-            // listener errors must not break the stream pump
-          }
-        }
+      default:
         break
-      }
     }
   }
 

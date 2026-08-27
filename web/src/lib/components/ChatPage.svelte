@@ -89,9 +89,17 @@ $effect(() => {
     if (event === 'todos-updated' || event === 'turn-complete') {
       void loadTodos(sid)
     }
+    if (event === 'tool-result' && typeof params.change_id === 'string') {
+      // A repo write just committed mid-turn: refresh the timeline (and
+      // the file tree) immediately instead of waiting for turn-complete.
+      store.bumpSessionRevision()
+    }
+    if (event === 'status' && params.type === 'busy') {
+      // Turn started = the queued prompt was consumed: mailbox state and
+      // the workspace tree may have moved.
+      store.bumpSessionRevision()
+    }
     if (event === 'turn-complete') {
-      // The turn may have produced commits/file writes: timeline, mailbox
-      // and the workspace file tree refetch on the next read.
       store.bumpSessionRevision()
     }
     void params
@@ -205,6 +213,41 @@ const tokensLabel = $derived.by(() => {
   if (totalTokens < 1000) return `${totalTokens}`
   return `${(totalTokens / 1000).toFixed(1)}k`
 })
+
+// ---- resizable side panel ----
+const PANEL_WIDTH_KEY = 'rucoder-panel-width'
+const DEFAULT_PANEL_WIDTH = 480
+
+function clampPanelWidth(w: number): number {
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
+  return Math.min(Math.max(Math.round(w), 360), Math.min(960, Math.floor(vw * 0.7)))
+}
+
+function loadPanelWidth(): number {
+  const raw = Number(localStorage.getItem(PANEL_WIDTH_KEY))
+  return clampPanelWidth(Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PANEL_WIDTH)
+}
+
+let panelWidth = $state(loadPanelWidth())
+let panelResizing = $state(false)
+
+function startPanelResize(e: PointerEvent): void {
+  e.preventDefault()
+  panelResizing = true
+  document.body.classList.add('select-none')
+  const onMove = (ev: PointerEvent): void => {
+    panelWidth = clampPanelWidth(window.innerWidth - ev.clientX)
+  }
+  const onUp = (): void => {
+    panelResizing = false
+    document.body.classList.remove('select-none')
+    localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth))
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
 
 const overlayTabs = [
   { id: 'timeline', label: 'Timeline', icon: GitBranch },
@@ -642,7 +685,16 @@ async function compact() {
 
         {#if store.sessionOverlay}
             <!-- Desktop: side panel next to chat -->
-            <div class="hidden lg:flex shrink-0 w-[480px] max-w-[55%] border-l border-border bg-background flex-col">
+            <div class="hidden lg:flex shrink-0 relative border-l border-border bg-background flex-col {panelResizing ? '' : 'transition-[width] duration-150'}"
+                 style={`width: ${panelWidth}px; max-width: 70vw`}>
+                <!-- Drag handle: resize the side panel (persisted) -->
+                <div class="absolute left-0 top-0 bottom-0 w-1.5 z-20 cursor-col-resize group"
+                     style="touch-action: none"
+                     role="separator" aria-orientation="vertical" aria-label="Resize panel"
+                     title="Drag to resize"
+                     onpointerdown={startPanelResize}>
+                    <div class="h-full w-full {panelResizing ? 'bg-primary/50' : 'group-hover:bg-primary/30 group-active:bg-primary/50'}"></div>
+                </div>
                 <div class="flex items-center gap-0.5 border-b border-border px-2 py-1.5 shrink-0" role="tablist" aria-label="Session panels">
                     {#each overlayTabs as tab (tab.id)}
                         <button
