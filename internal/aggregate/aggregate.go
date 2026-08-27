@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -680,6 +682,81 @@ func (a *API) sessionTodos(w http.ResponseWriter, r *http.Request) {
 
 // ---- fs: jj tree/contents adapted to the recoder fs contract ----
 
+// defaultBranchCache maps org/repo -> resolved default bookmark.
+var (
+	dbMu    sync.Mutex
+	dbCache = map[string]dbEntry{}
+)
+
+type dbEntry struct {
+	branch  string
+	expires time.Time
+}
+
+// resolveBranch returns the given branch, or the repo's conventional default
+// bookmark when empty. Repos like the build org only carry dev/master, so a
+// hardcoded "main" would 404 every fs read.
+func (a *API) resolveBranch(ctx context.Context, org, repo, branch string) string {
+	if branch != "" {
+		return branch
+	}
+	key := org + "/" + repo
+	dbMu.Lock()
+	if e, ok := dbCache[key]; ok && time.Now().Before(e.expires) {
+		dbMu.Unlock()
+		return e.branch
+	}
+	dbMu.Unlock()
+
+	var tree struct {
+		Orgs []struct {
+			Org   string `json:"org"`
+			Repos []struct {
+				Repo      string `json:"repo"`
+				Bookmarks []struct {
+					Branch string `json:"branch"`
+				} `json:"bookmarks"`
+			} `json:"repos"`
+		} `json:"orgs"`
+	}
+	out := ""
+	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos", nil, nil, &tree); err == nil {
+		for _, o := range tree.Orgs {
+			if o.Org != org {
+				continue
+			}
+			for _, rp := range o.Repos {
+				if rp.Repo != repo {
+					continue
+				}
+				names := map[string]bool{}
+				var first string
+				for _, bm := range rp.Bookmarks {
+					if first == "" {
+						first = bm.Branch
+					}
+					names[bm.Branch] = true
+				}
+				for _, pref := range []string{"main", "master", "dev"} {
+					if names[pref] {
+						out = pref
+						break
+					}
+				}
+				if out == "" {
+					out = first
+				}
+				break
+			}
+			break
+		}
+	}
+	dbMu.Lock()
+	dbCache[key] = dbEntry{branch: out, expires: time.Now().Add(30 * time.Second)}
+	dbMu.Unlock()
+	return out
+}
+
 func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	org, repo, branch, path := q.Get("org"), q.Get("repo"), q.Get("branch"), q.Get("path")
@@ -687,9 +764,7 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org/repo required")
 		return
 	}
-	if branch == "" {
-		branch = "main"
-	}
+	branch = a.resolveBranch(r.Context(), org, repo, branch)
 	var tree struct {
 		Tree []struct {
 			Path string `json:"path"`
@@ -697,7 +772,7 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 			Size int64  `json:"size"`
 		} `json:"tree"`
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, "/api/v1/repos/"+org+"/"+repo+"/"+branch+"/tree", nil, nil, &tree); err != nil {
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/"+url.PathEscape(branch)+"/tree", nil, nil, &tree); err != nil {
 		badGateway(w, "jj-server", err)
 		return
 	}
@@ -754,14 +829,12 @@ func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org/repo/path required")
 		return
 	}
-	if branch == "" {
-		branch = "main"
-	}
+	branch = a.resolveBranch(r.Context(), org, repo, branch)
 	var res struct {
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
 	}
-	pth := "/api/v1/repos/" + org + "/" + repo + "/" + branch + "/contents/" + path
+	pth := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/" + url.PathEscape(branch) + "/contents/" + path
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, pth, nil, nil, &res); err != nil {
 		badGateway(w, "jj-server", err)
 		return

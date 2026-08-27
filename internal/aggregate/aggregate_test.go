@@ -511,3 +511,38 @@ func TestPackageRoutesAcceptEscapedNames(t *testing.T) {
 		t.Fatalf("delete code=%d repo=%q", code, deletedRepo)
 	}
 }
+
+// TestFsDefaultsToConventionalBranch pins the empty-branch default: repos
+// that only carry dev/master must resolve to a real bookmark instead of the
+// hardcoded "main" (which 404'd every tree/read).
+func TestFsDefaultsToConventionalBranch(t *testing.T) {
+	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/repos" {
+			_, _ = w.Write([]byte(`{"orgs":[{"org":"build","repos":[{"repo":"svc","bookmarks":[{"branch":"master"},{"branch":"dev"}]}]}]}`))
+			return
+		}
+		// Whatever branch the gateway asks the tree for, echo it back.
+		if strings.Contains(r.URL.Path, "/tree") {
+			used := strings.Split(r.URL.Path, "/")[6]
+			_, _ = w.Write([]byte(`{"tree":[{"path":"go.mod","type":"blob","size":10}]}`))
+			_ = used
+			w.Header().Set("X-Used-Branch", used)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer repo.Close()
+
+	h := Router(&API{Up: &upstream.Upstreams{Repo: upstream.New(repo.URL)}})
+	code, v := do(t, h, "GET", "/fs/list?org=build&repo=svc", "")
+	if code != 200 {
+		t.Fatalf("code=%d (%v)", code, v)
+	}
+	// The default cache now holds master for build/svc.
+	dbMu.Lock()
+	cached := dbCache["build/svc"].branch
+	dbMu.Unlock()
+	if cached != "master" {
+		t.Fatalf("default branch = %q, want master (main absent, master before dev)", cached)
+	}
+}
