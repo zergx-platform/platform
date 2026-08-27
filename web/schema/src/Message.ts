@@ -38,7 +38,15 @@ export type MessagePart = z.infer<typeof MessagePartSchema>
 
 export const MessageSchema = z.object({
   id: z.string(),
-  role: z.enum(['user', 'assistant', 'tool', 'system', 'error', 'compaction']),
+  role: z.enum([
+    'user',
+    'assistant',
+    'tool',
+    'system',
+    'error',
+    'compaction',
+    'event',
+  ]),
   parts: z.array(MessagePartSchema),
   created_at: z.string().optional(),
 })
