@@ -15,8 +15,8 @@ import {
   OciCatalogSchema,
   PackageTypesResponseSchema,
   PackageVersionsResponseSchema,
-  RucoderConfigSchema,
-} from '@rucoder/schema'
+  ZergxConfigSchema,
+} from '@zergx/schema'
 
 export const containers = {
   /** Session sandboxes from ops-extension. */
@@ -279,12 +279,12 @@ export const packages = {
       e => (e instanceof Error ? e.message : String(e)),
     ),
 
-  rucoderConfig: () =>
+  zergxConfig: () =>
     ResultAsync.fromPromise(
       (async () => {
-        const r = await fetch('/api/v1/rucoder-config')
+        const r = await fetch('/api/v1/zergx-config')
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        const parsed = RucoderConfigSchema.safeParse(await r.json())
+        const parsed = ZergxConfigSchema.safeParse(await r.json())
         if (!parsed.success)
           throw new Error(`Schema validation failed: ${parsed.error.message}`)
         return parsed.data

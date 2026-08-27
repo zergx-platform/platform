@@ -1,4 +1,4 @@
-import type { ProviderInfo } from '@rucoder/schema'
+import type { ProviderInfo } from '@zergx/schema'
 import {
   DiffFileSchema,
   FileEntrySchema,
@@ -6,7 +6,7 @@ import {
   OrgNodeSchema,
   ProvidersMapSchema,
   SessionSchema,
-} from '@rucoder/schema'
+} from '@zergx/schema'
 import { z } from 'zod'
 import { del, get, OkSchema, post, put } from './api-core'
 import { qs } from './client'

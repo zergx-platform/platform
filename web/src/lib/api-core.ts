@@ -22,7 +22,7 @@ import type {
   ToolConfigMap,
   ToolInfo,
   ToolState,
-} from '@rucoder/schema'
+} from '@zergx/schema'
 import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 

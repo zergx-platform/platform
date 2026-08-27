@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Pencil, Trash2 } from '@lucide/svelte'
-import type { ProviderInfo, ProviderModel } from '@rucoder/schema'
+import type { ProviderInfo, ProviderModel } from '@zergx/schema'
 import { Button } from '$lib/components/ui/button'
 
 let {

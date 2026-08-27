@@ -5,8 +5,8 @@ import type {
   ModelInfo,
   ProviderInfo,
   ProviderModel,
-} from '@rucoder/schema'
-import { MdProvidersSchema } from '@rucoder/schema'
+} from '@zergx/schema'
+import { MdProvidersSchema } from '@zergx/schema'
 import { onMount } from 'svelte'
 import { z } from 'zod'
 import * as api from '$lib/api'
@@ -53,7 +53,7 @@ async function refreshProviders() {
 }
 
 async function loadModelsDev() {
-  const cached = localStorage.getItem('rucoder-models-dev')
+  const cached = localStorage.getItem('zergx-models-dev')
   const ModelCacheSchema = z.preprocess(
     v => (typeof v === 'string' ? JSON.parse(v) : v),
     z.object({ data: MdProvidersSchema, ts: z.number() }),
@@ -78,7 +78,7 @@ async function loadModelsDev() {
     if (!parsed.success) throw new Error('Invalid response format')
     mdProviders = parsed.data
     localStorage.setItem(
-      'rucoder-models-dev',
+      'zergx-models-dev',
       JSON.stringify({ data: mdProviders, ts: Date.now() }),
     )
   } catch (e: unknown) {

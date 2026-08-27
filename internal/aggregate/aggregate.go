@@ -17,9 +17,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
 )
 
 type API struct {
@@ -517,7 +517,7 @@ func (a *API) compactSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // sessionSettings forwards PATCH /sessions/{id}/settings to the agent and
-// wraps the returned session in the recoder UI shape (org/repo/branch split
+// wraps the returned session in the zergx UI shape (org/repo/branch split
 // from the session name).
 func (a *API) sessionSettings(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
@@ -681,7 +681,7 @@ func (a *API) sessionTodos(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// ---- fs: jj tree/contents adapted to the recoder fs contract ----
+// ---- fs: jj tree/contents adapted to the zergx fs contract ----
 
 // defaultBranchCache maps org/repo -> resolved default bookmark.
 var (

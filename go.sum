@@ -1,4 +1,4 @@
-forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared v0.1.0 h1:/PUNWKMjfffLh2hklyDmEBRwYHwSaKWpFqikq3WeOL8=
-forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared v0.1.0/go.mod h1:Q4OYQQ4mUFFmhj6h8y8kZedv6TDRmqG62QaQOvW6n1Y=
+forgejo.develop.10.199.64.20.nip.io/zergx/go-shared v0.1.0 h1:dcrmT+h9gHuSujy+PDa+mLWM5+Je7ahKGJtuz9UZ8SE=
+forgejo.develop.10.199.64.20.nip.io/zergx/go-shared v0.1.0/go.mod h1:QFor4G38FDMBx2D7mP4rszqDWgzTLQlL/lE4wDDe2Hg=
 github.com/go-chi/chi/v5 v5.3.2 h1:5YQkICvTCSZ25hoRsyJazN0scjzKGiu4VAUc7H1o1nY=
 github.com/go-chi/chi/v5 v5.3.2/go.mod h1:R+tYY2hNuVUUjxoPtqUdgBqevM9s9njzkTLutVsOCto=

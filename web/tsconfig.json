@@ -18,7 +18,7 @@
       "$lib": [
         "./src/lib"
       ],
-      "@rucoder/schema": [
+      "@zergx/schema": [
         "./schema/src/index.ts"
       ]
     },

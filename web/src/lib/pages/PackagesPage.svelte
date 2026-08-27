@@ -16,7 +16,7 @@ import {
   Upload,
   X,
 } from '@lucide/svelte'
-import type { PackageTypeEntry, RucoderConfig } from '@rucoder/schema'
+import type { PackageTypeEntry, ZergxConfig } from '@zergx/schema'
 import { onMount } from 'svelte'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'
@@ -26,7 +26,7 @@ import * as Card from '$lib/components/ui/card'
 // ── State ──────────────────────────────────────────────
 let tab = $state<'registries' | 'packages'>('registries')
 let types = $state<PackageTypeEntry[]>([])
-let rucoderCfg = $state<RucoderConfig | null>(null)
+let zergxCfg = $state<ZergxConfig | null>(null)
 let repositories = $state<string[]>([])
 let loading = $state(false)
 let error = $state('')
@@ -159,12 +159,12 @@ async function loadAll() {
   error = ''
   const [typesR, cfgR, catalogR] = await Promise.all([
     api.packages.listTypes(),
-    api.packages.rucoderConfig(),
+    api.packages.zergxConfig(),
     api.packages.ociCatalog(),
   ])
   if (typesR.isOk()) types = typesR.value
   else error = typesR.error
-  if (cfgR.isOk()) rucoderCfg = cfgR.value as RucoderConfig
+  if (cfgR.isOk()) zergxCfg = cfgR.value as ZergxConfig
   if (catalogR.isOk()) repositories = catalogR.value.repositories
   loading = false
 }
@@ -291,8 +291,8 @@ const filtered = $derived(
 					<h1 class="text-lg font-semibold leading-tight">Packages</h1>
 					<p class="text-xs text-muted-foreground">
 						Proxy registries for {types.length} ecosystems
-						{#if rucoderCfg?.self_base}
-							· self_base: <span class="font-mono">{rucoderCfg.self_base}</span>
+						{#if zergxCfg?.self_base}
+							· self_base: <span class="font-mono">{zergxCfg.self_base}</span>
 						{/if}
 					</p>
 				</div>
@@ -469,8 +469,8 @@ const filtered = $derived(
 						{/if}
 					</section>
 
-					<!-- rucoder config (read-only) -->
-					{#if rucoderCfg}
+					<!-- zergx config (read-only) -->
+					{#if zergxCfg}
 						<section>
 							<div class="flex items-center gap-2 mb-3">
 								<Server class="size-4 text-muted-foreground" />
@@ -483,11 +483,11 @@ const filtered = $derived(
 								<Card.Content class="text-xs space-y-1.5 pt-3">
 									<div class="flex items-center gap-2">
 										<span class="text-muted-foreground w-24 shrink-0">self_base</span>
-										<span class="font-mono truncate">{rucoderCfg.self_base || '—'}</span>
+										<span class="font-mono truncate">{zergxCfg.self_base || '—'}</span>
 									</div>
 									<div class="flex items-center gap-2">
 										<span class="text-muted-foreground w-24 shrink-0">http_proxy</span>
-										<span class="font-mono truncate">{rucoderCfg.http_proxy || '—'}</span>
+										<span class="font-mono truncate">{zergxCfg.http_proxy || '—'}</span>
 									</div>
 								</Card.Content>
 							</Card.Root>

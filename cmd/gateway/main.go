@@ -15,11 +15,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/aggregate"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/proxy"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/upstream"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/web"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/env"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/aggregate"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/proxy"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/web"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func main() {
 		pair{"/api/v1/config", up.Agent.Base},
 		pair{"/api/v1/tool-config", up.Agent.Base},
 		pair{"/api/v1/tools", up.Agent.Base},
-		pair{"/api/v1/rucoder-config", up.Agent.Base},
+		pair{"/api/v1/zergx-config", up.Agent.Base},
 		// jj-server passthroughs (diff/file/file-log/file-diff/delete/org…)
 		pair{"/api/v1/repos", up.Repo.Base},
 		pair{"/git", up.Repo.Base},
@@ -88,7 +88,7 @@ func main() {
 		fileServer("web/dist", r)
 	}
 
-	port := env.Or("RUCODER_PORT", "8080")
+	port := env.Or("ZERGX_PORT", "8080")
 	srv := &http.Server{Addr: ":" + port, Handler: r}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

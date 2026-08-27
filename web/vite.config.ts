@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: {
       $lib: path.resolve('./src/lib'),
-      '@rucoder/schema': path.resolve('./schema/src/index.ts'),
+      '@zergx/schema': path.resolve('./schema/src/index.ts'),
     },
   },
   server: {

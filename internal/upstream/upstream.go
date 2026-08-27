@@ -103,13 +103,13 @@ func FromEnv(env func(string) string) *Upstreams {
 	}
 	return &Upstreams{
 		// Prefer the gateway-specific names; fall back to the chart's
-		// RUCODER_*_URL service map (external-secret).
-		Agent:    New(or("AGENT_URL", "RUCODER_AGENT_URL", "http://rucoder-agent.temp.svc.cluster.local:80")),
-		Repo:     New(or("REPO_URL", "RUCODER_REPO_MANAGER_URL", "http://rucoder-repo.temp.svc.cluster.local:80")),
-		RepoExt:  New(or("REPOEXT_URL", "RUCODER_REPOEXT_URL", "http://rucoder-repo-extension.temp.svc.cluster.local:80")),
-		Ops:      New(or("OPS_URL", "RUCODER_EXECUTOR_URL", "http://rucoder-ops-extension.temp.svc.cluster.local:80")),
-		Artifact: New(or("ARTIFACT_URL", "RUCODER_ZOT_URL", "RUCODER_REGISTRY_URL", "http://rucoder-artifact.temp.svc.cluster.local:80")),
-		Browser:  New(or("BROWSER_URL", "RUCODER_BROWSER_URL", "http://rucoder-browser-extension.temp.svc.cluster.local:80")),
-		Memory:   New(or("MEMORY_URL", "RUCODER_MEMORY_URL", "http://rucoder-memory-tools.temp.svc.cluster.local:80")),
+		// ZERGX_*_URL service map (external-secret).
+		Agent:    New(or("AGENT_URL", "ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80")),
+		Repo:     New(or("REPO_URL", "ZERGX_REPO_MANAGER_URL", "http://repo.zergx.svc.cluster.local:80")),
+		RepoExt:  New(or("REPOEXT_URL", "ZERGX_REPOEXT_URL", "http://repo-extension.zergx.svc.cluster.local:80")),
+		Ops:      New(or("OPS_URL", "ZERGX_EXECUTOR_URL", "http://ops-extension.zergx.svc.cluster.local:80")),
+		Artifact: New(or("ARTIFACT_URL", "ZERGX_ZOT_URL", "ZERGX_REGISTRY_URL", "http://rucoder-artifact.temp.10.199.64.20.nip.io:80")),
+		Browser:  New(or("BROWSER_URL", "ZERGX_BROWSER_URL", "http://browser-extension.zergx.svc.cluster.local:80")),
+		Memory:   New(or("MEMORY_URL", "ZERGX_MEMORY_URL", "http://memory-tools.zergx.svc.cluster.local:80")),
 	}
 }

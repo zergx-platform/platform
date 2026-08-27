@@ -3,7 +3,7 @@ import type {
   Message,
   PresetInfo,
   ToolConfigMap,
-} from '@rucoder/schema'
+} from '@zergx/schema'
 import {
   ChangeEntrySchema,
   MailboxEntrySchema,
@@ -12,7 +12,7 @@ import {
   SessionSchema,
   ToolConfigMapSchema,
   ToolInfoSchema,
-} from '@rucoder/schema'
+} from '@zergx/schema'
 import { z } from 'zod'
 import { del, get, OkSchema, patch, post, put } from './api-core'
 import { qs } from './client'

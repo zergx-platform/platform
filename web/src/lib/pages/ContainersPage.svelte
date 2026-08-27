@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import type { Deployment, DeploymentPod, Sandbox } from '@rucoder/schema'
+import type { Deployment, DeploymentPod, Sandbox } from '@zergx/schema'
 import * as api from '$lib/api'
 import {
   closeContainerUrl,
@@ -583,7 +583,7 @@ function termContainer(): Sandbox | undefined {
                 <label class="text-xs font-medium text-muted-foreground" for="cc-image">Image</label>
                 <input id="cc-image" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
                     placeholder="docker.io/library/debian:trixie" bind:value={createImage} />
-                <p class="text-[10px] text-muted-foreground mt-1">Image is pulled by rucoder from the configured registry.</p>
+                <p class="text-[10px] text-muted-foreground mt-1">Image is pulled by zergx from the configured registry.</p>
             </div>
 
             {#if createError}

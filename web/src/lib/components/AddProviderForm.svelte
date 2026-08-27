@@ -9,7 +9,7 @@ import {
   Search,
   X,
 } from '@lucide/svelte'
-import type { MdProvider, ProviderModel } from '@rucoder/schema'
+import type { MdProvider, ProviderModel } from '@zergx/schema'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'
 

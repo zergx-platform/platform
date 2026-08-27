@@ -1,6 +1,6 @@
 <script lang="ts">
 import { ChevronDown, Save } from '@lucide/svelte'
-import type { ProviderInfo, ToolConfigMap, ToolInfo } from '@rucoder/schema'
+import type { ProviderInfo, ToolConfigMap, ToolInfo } from '@zergx/schema'
 import { onMount } from 'svelte'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'

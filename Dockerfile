@@ -36,6 +36,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM ${REGISTRY}/library/alpine:3.24
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/gateway-go /usr/local/bin/gateway-go
-ENV RUCODER_PORT=8080
+ENV ZERGX_PORT=8080
 EXPOSE 8080
 ENTRYPOINT ["gateway-go"]

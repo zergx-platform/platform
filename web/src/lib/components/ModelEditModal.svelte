@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ProviderModel } from '@rucoder/schema'
+import type { ProviderModel } from '@zergx/schema'
 import { Button } from '$lib/components/ui/button'
 
 let {

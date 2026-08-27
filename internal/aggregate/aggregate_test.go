@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/upstream"
-	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 )
 
 type fakeBackends struct {
@@ -75,9 +75,9 @@ func newFakeBackends() *fakeBackends {
 			return
 		}
 		_, _ = w.Write([]byte(`{"commits":[
-			{"change_id":"c2","commit_id":"k2","author":"rucoder","timestamp":"2026-01-02","message":"edit hello"},
-			{"change_id":"c1","commit_id":"k1","author":"rucoder","timestamp":"2026-01-01","message":"write hello"},
-			{"change_id":"c0","commit_id":"k0","author":"rucoder","timestamp":"2026-01-01","message":"initial commit"}
+			{"change_id":"c2","commit_id":"k2","author":"zergx","timestamp":"2026-01-02","message":"edit hello"},
+			{"change_id":"c1","commit_id":"k1","author":"zergx","timestamp":"2026-01-01","message":"write hello"},
+			{"change_id":"c0","commit_id":"k0","author":"zergx","timestamp":"2026-01-01","message":"initial commit"}
 		]}`))
 	})
 	fb.repo = httptest.NewServer(mux)

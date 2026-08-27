@@ -197,7 +197,7 @@ const currentModelName = $derived.by(() => {
 const currentBaseImageLabel = $derived.by(() => {
   const img = store.activeSession?.base_image
   if (!img) return 'debian-trixie-slim'
-  const m = img.match(/(?:rucoder|recoder)-worker:([^/]+)$/)
+  const m = img.match(/(?:zergx)-worker:([^/]+)$/)
   return m ? m[1] : img
 })
 
@@ -215,7 +215,7 @@ const tokensLabel = $derived.by(() => {
 })
 
 // ---- resizable side panel ----
-const PANEL_WIDTH_KEY = 'rucoder-panel-width'
+const PANEL_WIDTH_KEY = 'zergx-panel-width'
 const DEFAULT_PANEL_WIDTH = 480
 
 function clampPanelWidth(w: number): number {

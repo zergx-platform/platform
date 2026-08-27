@@ -12,7 +12,7 @@ import {
   Sparkles,
   Wrench,
 } from '@lucide/svelte'
-import type { ModelInfo, ProviderInfo } from '@rucoder/schema'
+import type { ModelInfo, ProviderInfo } from '@zergx/schema'
 import { onMount } from 'svelte'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'
@@ -153,7 +153,7 @@ async function refreshProviders() {
                             </div>
                         {/if}
                         <div><label class="text-sm font-medium" for="k8s_img">Worker Image</label>
-                            <input id="k8s_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="rucoder-artifact.temp.10.199.64.20.nip.io/rucoder-worker:latest" value={values["worker_base_image"] || ""} oninput={(e) => values = { ...values, worker_base_image: e.currentTarget.value }} /></div>
+                            <input id="k8s_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="rucoder-artifact.temp.10.199.64.20.nip.io/zergx-worker:latest" value={values["worker_base_image"] || ""} oninput={(e) => values = { ...values, worker_base_image: e.currentTarget.value }} /></div>
                         <div><label class="text-sm font-medium" for="k8s_ns">Namespace</label>
                             <input id="k8s_ns" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="temp" value={values["k8s_namespace"] || ""} oninput={(e) => values = { ...values, k8s_namespace: e.currentTarget.value }} /></div>
                         <div><label class="text-sm font-medium" for="kube_cfg">Kubeconfig</label>
@@ -162,7 +162,7 @@ async function refreshProviders() {
                 {:else}
                     <div class="space-y-3">
                         <div><label class="text-sm font-medium" for="docker_img">Worker Image</label>
-                            <input id="docker_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="rucoder-artifact.temp.10.199.64.20.nip.io/rucoder-worker:latest" value={values["worker_image"] || ""} oninput={(e) => values = { ...values, worker_image: e.currentTarget.value }} /></div>
+                            <input id="docker_img" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="rucoder-artifact.temp.10.199.64.20.nip.io/zergx-worker:latest" value={values["worker_image"] || ""} oninput={(e) => values = { ...values, worker_image: e.currentTarget.value }} /></div>
                         <div><label class="text-sm font-medium" for="docker_url">Docker API URL</label>
                             <input id="docker_url" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://podman.podman.svc.cluster.local:8080" value={values["docker_api_url"] || ""} oninput={(e) => values = { ...values, docker_api_url: e.currentTarget.value }} /></div>
                     </div>
@@ -187,7 +187,7 @@ async function refreshProviders() {
                 <div class="grid grid-cols-1 gap-3">
                     <div>
                         <label class="text-sm font-medium" for="repos_root">Repos Root</label>
-                        <input id="repos_root" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="/home/user/.rucoder/repos" value={values["repos_root"] || ""} oninput={(e) => values = { ...values, repos_root: e.currentTarget.value }} />
+                        <input id="repos_root" type="text" class="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="/home/user/.zergx/repos" value={values["repos_root"] || ""} oninput={(e) => values = { ...values, repos_root: e.currentTarget.value }} />
                     </div>
                     <div>
                         <label class="text-sm font-medium" for="server_url">Server URL</label>
