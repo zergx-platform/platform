@@ -1,4 +1,4 @@
-import type { MessagePart } from '@recoder-neo/schema'
+import type { MessagePart } from '@rucoder/schema'
 import type { Message } from '$lib/api'
 import { uid } from '$lib/utils'
 

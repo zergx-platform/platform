@@ -103,11 +103,11 @@ export const PackageTypesResponseSchema = z.object({
 })
 export type PackageTypesResponse = z.infer<typeof PackageTypesResponseSchema>
 
-export const RecoreConfigSchema = z.object({
+export const RucoderConfigSchema = z.object({
   http_proxy: z.string().optional(),
   self_base: z.string().optional(),
 })
-export type RecoreConfig = z.infer<typeof RecoreConfigSchema>
+export type RucoderConfig = z.infer<typeof RucoderConfigSchema>
 
 export const OciCatalogSchema = z.object({
   repositories: z.array(z.string()),

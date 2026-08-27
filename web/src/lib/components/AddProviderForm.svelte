@@ -9,7 +9,7 @@ import {
   Search,
   X,
 } from '@lucide/svelte'
-import type { MdProvider, ProviderModel } from '@recoder-neo/schema'
+import type { MdProvider, ProviderModel } from '@rucoder/schema'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'
 

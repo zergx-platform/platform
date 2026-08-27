@@ -1,4 +1,4 @@
-import type { ProviderInfo } from '@recoder-neo/schema'
+import type { ProviderInfo } from '@rucoder/schema'
 import {
   DiffFileSchema,
   FileEntrySchema,
@@ -6,7 +6,7 @@ import {
   OrgNodeSchema,
   ProvidersMapSchema,
   SessionSchema,
-} from '@recoder-neo/schema'
+} from '@rucoder/schema'
 import { z } from 'zod'
 import { del, get, OkSchema, post, put } from './api-core'
 import { qs } from './client'

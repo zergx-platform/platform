@@ -3,7 +3,7 @@ import type {
   Message,
   PresetInfo,
   ToolConfigMap,
-} from '@recoder-neo/schema'
+} from '@rucoder/schema'
 import {
   ChangeEntrySchema,
   MailboxEntrySchema,
@@ -12,7 +12,7 @@ import {
   SessionSchema,
   ToolConfigMapSchema,
   ToolInfoSchema,
-} from '@recoder-neo/schema'
+} from '@rucoder/schema'
 import { z } from 'zod'
 import { del, get, OkSchema, patch, post, put } from './api-core'
 import { qs } from './client'
@@ -126,12 +126,6 @@ export const sessions = {
       `/api/v1/sessions/${encodeURIComponent(id)}/read`,
       undefined,
       z.object({ ok: z.boolean() }),
-    ),
-  redo: (id: string) =>
-    post(
-      `/api/v1/sessions/${encodeURIComponent(id)}/redo`,
-      undefined,
-      z.object({ ok: z.boolean(), redone: z.boolean().optional() }),
     ),
   state: (id: string) =>
     get(

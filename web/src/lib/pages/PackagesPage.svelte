@@ -16,7 +16,7 @@ import {
   Upload,
   X,
 } from '@lucide/svelte'
-import type { PackageTypeEntry, RecoreConfig } from '@recoder-neo/schema'
+import type { PackageTypeEntry, RucoderConfig } from '@rucoder/schema'
 import { onMount } from 'svelte'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'
@@ -25,7 +25,7 @@ import * as Card from '$lib/components/ui/card'
 // ── State ──────────────────────────────────────────────
 let tab = $state<'registries' | 'packages'>('registries')
 let types = $state<PackageTypeEntry[]>([])
-let recoreCfg = $state<RecoreConfig | null>(null)
+let rucoderCfg = $state<RucoderConfig | null>(null)
 let repositories = $state<string[]>([])
 let loading = $state(false)
 let error = $state('')
@@ -140,12 +140,12 @@ async function loadAll() {
   error = ''
   const [typesR, cfgR, catalogR] = await Promise.all([
     api.packages.listTypes(),
-    api.packages.recoreConfig(),
+    api.packages.rucoderConfig(),
     api.packages.ociCatalog(),
   ])
   if (typesR.isOk()) types = typesR.value
   else error = typesR.error
-  if (cfgR.isOk()) recoreCfg = cfgR.value as RecoreConfig
+  if (cfgR.isOk()) rucoderCfg = cfgR.value as RucoderConfig
   if (catalogR.isOk()) repositories = catalogR.value.repositories
   loading = false
 }
@@ -272,8 +272,8 @@ const filtered = $derived(
 					<h1 class="text-lg font-semibold leading-tight">Packages</h1>
 					<p class="text-xs text-muted-foreground">
 						Proxy registries for {types.length} ecosystems
-						{#if recoreCfg?.self_base}
-							· self_base: <span class="font-mono">{recoreCfg.self_base}</span>
+						{#if rucoderCfg?.self_base}
+							· self_base: <span class="font-mono">{rucoderCfg.self_base}</span>
 						{/if}
 					</p>
 				</div>
@@ -450,8 +450,8 @@ const filtered = $derived(
 						{/if}
 					</section>
 
-					<!-- recore config (read-only) -->
-					{#if recoreCfg}
+					<!-- rucoder config (read-only) -->
+					{#if rucoderCfg}
 						<section>
 							<div class="flex items-center gap-2 mb-3">
 								<Server class="size-4 text-muted-foreground" />
@@ -464,11 +464,11 @@ const filtered = $derived(
 								<Card.Content class="text-xs space-y-1.5 pt-3">
 									<div class="flex items-center gap-2">
 										<span class="text-muted-foreground w-24 shrink-0">self_base</span>
-										<span class="font-mono truncate">{recoreCfg.self_base || '—'}</span>
+										<span class="font-mono truncate">{rucoderCfg.self_base || '—'}</span>
 									</div>
 									<div class="flex items-center gap-2">
 										<span class="text-muted-foreground w-24 shrink-0">http_proxy</span>
-										<span class="font-mono truncate">{recoreCfg.http_proxy || '—'}</span>
+										<span class="font-mono truncate">{rucoderCfg.http_proxy || '—'}</span>
 									</div>
 								</Card.Content>
 							</Card.Root>

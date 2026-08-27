@@ -562,11 +562,12 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	messageId := ""
 	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, sessPath(id, "/messages"), nil, upstream.Q("limit", "10"), &msgs); err == nil {
-		// messages come newest-first; the first user row is this prompt
+		// messages come oldest-first (chain walk, ORDER BY depth DESC); the
+		// LAST user row is the just-persisted prompt. Taking the first row
+		// anchored the UI's optimistic bubble to the oldest user message.
 		for _, m := range msgs.Messages {
 			if m.Role == "user" {
 				messageId = m.ID
-				break
 			}
 		}
 	}

@@ -39,7 +39,7 @@ func main() {
 		pair{"/api/v1/config", up.Agent.Base},
 		pair{"/api/v1/tool-config", up.Agent.Base},
 		pair{"/api/v1/tools", up.Agent.Base},
-		pair{"/api/v1/recore-config", up.Agent.Base},
+		pair{"/api/v1/rucoder-config", up.Agent.Base},
 		// jj-server passthroughs (diff/file/file-log/file-diff/delete/org…)
 		pair{"/api/v1/repos", up.Repo.Base},
 		pair{"/git", up.Repo.Base},

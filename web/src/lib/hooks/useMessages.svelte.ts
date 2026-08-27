@@ -428,7 +428,6 @@ export function createMessages(sessionId: () => string) {
     const trimmed = text.trim()
     if (!trimmed || sending) return
     sending = true
-    canRedo = false
     // optimistic: clear any stale streaming, add pending user msg + streaming placeholder
     const optimisticUserSeq = allocSeq()
     messages = [
@@ -486,12 +485,10 @@ export function createMessages(sessionId: () => string) {
     finishStreaming()
   }
 
-  let canRedo = $state(false)
 
   async function revert(messageId: string): Promise<void> {
     const current = sortedMsgs
     await api.sessions.revert(sessionId(), messageId)
-    canRedo = true
     const idx = current.findIndex(m => m.id === messageId)
     const keep = idx >= 0 ? current.slice(0, idx) : current
     messages = keep.map(m =>
@@ -502,21 +499,9 @@ export function createMessages(sessionId: () => string) {
     void fetchMessages()
   }
 
-  async function redo(): Promise<void> {
-    if (!canRedo) return
-    const r = await api.sessions.redo(sessionId())
-    if (r.isOk() && r.value.ok) {
-      canRedo = false
-      void fetchMessages()
-    }
-  }
-
   return {
     get messages() {
       return sortedMsgs
-    },
-    get canRedo() {
-      return canRedo
     },
     get sending() {
       return sending
@@ -530,7 +515,6 @@ export function createMessages(sessionId: () => string) {
     send,
     loadMore,
     abort,
-    redo,
     revert,
     init,
   }

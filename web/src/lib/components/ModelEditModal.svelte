@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ProviderModel } from '@recoder-neo/schema'
+import type { ProviderModel } from '@rucoder/schema'
 import { Button } from '$lib/components/ui/button'
 
 let {

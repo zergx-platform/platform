@@ -1,6 +1,6 @@
 <script lang="ts">
 import { ChevronDown, Pencil, Plus, Save, Trash2, X } from '@lucide/svelte'
-import type { PresetInfo, ToolInfo } from '@recoder-neo/schema'
+import type { PresetInfo, ToolInfo } from '@rucoder/schema'
 import { onMount } from 'svelte'
 import * as api from '$lib/api'
 import { Button } from '$lib/components/ui/button'

@@ -1,4 +1,4 @@
-import type { FileEntry, OrgNode, Session } from '@recoder-neo/schema'
+import type { FileEntry, OrgNode, Session } from '@rucoder/schema'
 import { getContext, setContext } from 'svelte'
 import type { FileCommit, SiderTab } from '$lib/api'
 import * as api from '$lib/api'

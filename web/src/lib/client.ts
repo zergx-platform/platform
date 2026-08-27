@@ -1,5 +1,5 @@
 /**
- * Path builders for the gateway API. The recoder hono-RPC client was
+ * Path builders for the gateway API. The legacy hono-RPC client was
  * replaced by plain paths against the gateway-go aggregate surface; response
  * shapes stay validated by the zod schemas at each call site.
  */

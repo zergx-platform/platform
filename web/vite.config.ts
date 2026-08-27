@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: {
       $lib: path.resolve('./src/lib'),
-      '@recoder-neo/schema': path.resolve('./schema/src/index.ts'),
+      '@rucoder/schema': path.resolve('./schema/src/index.ts'),
     },
   },
   server: {

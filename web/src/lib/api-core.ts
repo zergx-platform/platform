@@ -22,7 +22,7 @@ import type {
   ToolConfigMap,
   ToolInfo,
   ToolState,
-} from '@recoder-neo/schema'
+} from '@rucoder/schema'
 import { ResultAsync } from 'neverthrow'
 import { z } from 'zod'
 

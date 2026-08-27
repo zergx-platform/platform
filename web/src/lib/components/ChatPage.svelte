@@ -17,7 +17,6 @@ import {
   Layers,
   ListTodo,
   MoreVertical,
-  RotateCcw,
   Send,
   Settings,
   Square,
@@ -172,7 +171,7 @@ const currentModelName = $derived.by(() => {
 const currentBaseImageLabel = $derived.by(() => {
   const img = store.activeSession?.base_image
   if (!img) return 'debian-trixie-slim'
-  const m = img.match(/recoder-worker:([^/]+)$/)
+  const m = img.match(/(?:rucoder|recoder)-worker:([^/]+)$/)
   return m ? m[1] : img
 })
 
@@ -422,12 +421,6 @@ async function compact() {
                 {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" class="w-56">
-                {#if msgHook?.canRedo}
-                    <DropdownMenu.Item onclick={() => msgHook?.redo()}>
-                        <RotateCcw class="size-4" />
-                        Redo
-                    </DropdownMenu.Item>
-                {/if}
                 <DropdownMenu.Item onclick={() => (showSettings = true)}>
                     <Settings class="size-4" />
                     Session settings
