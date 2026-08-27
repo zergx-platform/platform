@@ -21,7 +21,8 @@ ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY} \
     NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,.nip.io \
     GOINSECURE=forgejo.develop.10.199.64.20.nip.io \
     GOPRIVATE=forgejo.develop.10.199.64.20.nip.io
-RUN apk add --no-cache git \
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
+    && apk add --no-cache git \
     && git config --global http.sslVerify false \
     && git config --global url."https://root:devpassword@forgejo.develop.10.199.64.20.nip.io/".insteadOf "https://forgejo.develop.10.199.64.20.nip.io/"
 WORKDIR /src
@@ -34,7 +35,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -o /out/gateway-go ./cmd/gateway
 
 FROM ${REGISTRY}/library/alpine:3.24
-RUN apk add --no-cache ca-certificates
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
+    && apk add --no-cache ca-certificates
 COPY --from=build /out/gateway-go /usr/local/bin/gateway-go
 ENV ZERGX_PORT=8080
 EXPOSE 8080
