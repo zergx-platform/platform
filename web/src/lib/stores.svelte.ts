@@ -140,6 +140,20 @@ export function createStore(initTheme?: string): Store {
     state.codeLoading = false
   }
 
+  // defaultBranchOf picks the bookmark to open when none was given:
+  // main → master → dev → first bookmark ('' when the repo has none yet).
+  function defaultBranchOf(org: string, repo: string): string {
+    const bms =
+      state.orgs
+        .find(o => o.org === org)
+        ?.repos.find(r => r.repo === repo)
+        ?.bookmarks.map(b => b.branch) ?? []
+    for (const pref of ['main', 'master', 'dev']) {
+      if (bms.includes(pref)) return pref
+    }
+    return bms[0] ?? ''
+  }
+
   async function toggleDir(dir: string) {
     if (state.expandedDirs.has(dir)) {
       state.expandedDirs.delete(dir)
@@ -328,10 +342,14 @@ export function createStore(initTheme?: string): Store {
     async openRepo(org: string, repo: string, branch?: string) {
       state.codeOrg = org
       state.codeRepo = repo
-      state.codeBranch = branch || ''
+      // No explicit bookmark: pick the repo's conventional default instead
+      // of a hardcoded "main" (build/* repos only carry dev/master and would
+      // otherwise render an empty tree with 404 reads).
+      state.codeBranch = branch || defaultBranchOf(org, repo)
       state.selectedFilePath = null
       state.fileContent = ''
       state.showFileHistory = false
+      state.fileHistory = []
       state.treeCache = {}
       state.expandedDirs = new Set([''])
       await loadTreeDir('')

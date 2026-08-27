@@ -12,10 +12,22 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "paths": {
-      "$lib/*": ["./src/lib/*"],
-      "$lib": ["./src/lib"]
+      "$lib/*": [
+        "./src/lib/*"
+      ],
+      "$lib": [
+        "./src/lib"
+      ],
+      "@recoder-neo/schema": [
+        "./schema/src/index.ts"
+      ]
     },
-    "types": ["svelte"]
+    "types": [
+      "svelte"
+    ]
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte"
+  ]
 }

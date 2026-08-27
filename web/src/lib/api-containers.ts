@@ -40,6 +40,30 @@ export const containers = {
       z.object({ pods: z.array(DeploymentPodSchema) }),
     ).map(r => r.pods),
 
+  /** Recent k8s events of one deployment (warnings surfaced in the UI). */
+  deploymentEvents: (name: string) =>
+    get(
+      `/api/v1/deployments/${encodeURIComponent(name)}/events`,
+      z.object({
+        events: z.array(
+          z.object({
+            type: z.string().optional(),
+            reason: z.string().optional(),
+            message: z.string().optional(),
+            age: z.string().optional(),
+          }),
+        ),
+      }),
+    ).map(r => r.events),
+
+  /** Rollout restart (kicks a re-pull of the current image tag). */
+  restartDeployment: (name: string) =>
+    post(
+      `/api/v1/deployments/${encodeURIComponent(name)}/restart`,
+      undefined,
+      z.object({ ok: z.boolean() }),
+    ),
+
   /** Rollout status of one deployment. */
   deploymentStatus: (name: string) =>
     get(

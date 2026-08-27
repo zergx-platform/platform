@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import type { Deployment, Sandbox } from '@recoder-neo/schema'
+import type { Deployment, DeploymentPod, Sandbox } from '@recoder-neo/schema'
 import * as api from '$lib/api'
 import {
   closeContainerUrl,
@@ -51,6 +51,61 @@ let deploying = $state(false)
 let deployError = $state('')
 let confirmDeployDelete = $state<string | null>(null)
 let deployDeleteBusy = $state(false)
+
+// Deployment drill-down: conditions + recent events + pods + restart.
+interface DeploymentEvent {
+  type?: string
+  reason?: string
+  message?: string
+  age?: string
+}
+let expandedDeployment = $state<string | null>(null)
+let deployDetail = $state<{
+  conditions: string[]
+  events: DeploymentEvent[]
+  pods: DeploymentPod[]
+} | null>(null)
+let deployDetailLoading = $state(false)
+let restartBusy = $state<string | null>(null)
+
+async function reloadDeploymentDetail(name: string) {
+  deployDetailLoading = true
+  const [sr, er, pr] = await Promise.all([
+    api.containers.deploymentStatus(name),
+    api.containers.deploymentEvents(name),
+    api.containers.deploymentPods(name),
+  ])
+  deployDetail = {
+    conditions: sr.isOk() ? (sr.value.conditions as unknown as string[]) : [],
+    events: er.isOk() ? er.value : [],
+    pods: pr.isOk() ? pr.value : [],
+  }
+  deployDetailLoading = false
+}
+
+async function toggleDeploymentDetail(name: string) {
+  if (expandedDeployment === name) {
+    expandedDeployment = null
+    deployDetail = null
+    return
+  }
+  expandedDeployment = name
+  deployDetail = null
+  await reloadDeploymentDetail(name)
+}
+
+async function restartDeployment(name: string) {
+  restartBusy = name
+  const r = await api.containers.restartDeployment(name)
+  restartBusy = null
+  if (r.isOk()) {
+    // Give the rollout a moment, then refresh the drill-down + list.
+    setTimeout(() => {
+      if (expandedDeployment === name) void reloadDeploymentDetail(name)
+      void loadAll()
+    }, 1500)
+  }
+}
 
 // Create container dialog
 let showCreate = $state(false)
@@ -260,21 +315,76 @@ function termContainer(): Sandbox | undefined {
                     {:else}
                         <div class="space-y-2">
                             {#each deployments as d (d.name)}
-                                <div class="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2 text-xs">
-                                    <Globe class="size-3.5 text-primary shrink-0" />
-                                    <div class="flex-1 min-w-0">
-                                        <div class="font-mono font-medium truncate">{d.name}</div>
-                                        <div class="text-muted-foreground truncate">{d.image}</div>
+                                <div class="rounded-md border border-border/60">
+                                    <div class="flex items-center gap-3 px-3 py-2 text-xs cursor-pointer hover:bg-muted/40"
+                                        onclick={() => toggleDeploymentDetail(d.name)}
+                                        role="button"
+                                        tabindex="0"
+                                        onkeydown={e => { if (e.key === 'Enter' || e.key === ' ') toggleDeploymentDetail(d.name) }}>
+                                        <Globe class="size-3.5 text-primary shrink-0" />
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-mono font-medium truncate">{d.name}</div>
+                                            <div class="text-muted-foreground truncate">{d.image}</div>
+                                        </div>
+                                        <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] {d.ready > 0 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'}">{d.ready}/{d.replicas} ready</span>
+                                        {#if d.ports.length > 0}
+                                            <span class="shrink-0 text-muted-foreground font-mono">:{d.ports.join(',:')}</span>
+                                        {/if}
+                                        <span class="shrink-0 text-muted-foreground text-[10px]">{d.age}</span>
+                                        <Button variant="ghost" size="icon" class="size-6 shrink-0" disabled={restartBusy === d.name}
+                                            title="Rollout restart"
+                                            onclick={e => { e.stopPropagation(); void restartDeployment(d.name) }}>
+                                            {#if restartBusy === d.name}
+                                                <Loader2 class="size-3.5 animate-spin" />
+                                            {:else}
+                                                <RefreshCw class="size-3.5" />
+                                            {/if}
+                                        </Button>
+                                        <Button variant="ghost" size="icon" class="size-6 shrink-0 text-destructive hover:bg-destructive/10" disabled={deployDeleteBusy}
+                                            onclick={e => { e.stopPropagation(); destroyDeployment(d.name) }}>
+                                            <Trash2 class="size-3.5" />
+                                        </Button>
                                     </div>
-                                    <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground">{d.ready}/{d.replicas} ready</span>
-                                    {#if d.ports.length > 0}
-                                        <span class="shrink-0 text-muted-foreground font-mono">:{d.ports.join(',:')}</span>
+                                    {#if expandedDeployment === d.name}
+                                        <div class="border-t border-border/60 px-3 py-2 text-xs space-y-2">
+                                            {#if deployDetailLoading}
+                                                <div class="flex items-center gap-2 text-muted-foreground py-2">
+                                                    <Loader2 class="size-3 animate-spin" /> Loading details...
+                                                </div>
+                                            {:else if deployDetail}
+                                                {#if deployDetail.conditions.length > 0}
+                                                    <div class="flex flex-wrap gap-1">
+                                                        {#each deployDetail.conditions as c (c)}
+                                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono {c.includes('=False') ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-muted text-muted-foreground'}">{c}</span>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+                                                {#if deployDetail.pods.length > 0}
+                                                    <div class="space-y-1">
+                                                        {#each deployDetail.pods as p (p.name)}
+                                                            <div class="flex items-center gap-2 font-mono text-[10px]">
+                                                                <span class="size-1.5 rounded-full shrink-0 {p.ready ? 'bg-emerald-500' : p.phase === 'Pending' ? 'bg-amber-500' : 'bg-red-500'}"></span>
+                                                                <span class="truncate flex-1">{p.name}</span>
+                                                                {#if p.ip}<span class="text-muted-foreground">{p.ip}</span>{/if}
+                                                                <span class="text-muted-foreground">{p.phase}</span>
+                                                            </div>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+                                                {#if deployDetail.events.length > 0}
+                                                    <div class="space-y-0.5 max-h-32 overflow-y-auto">
+                                                        {#each deployDetail.events.slice(0, 8) as ev, i (i)}
+                                                            <div class="text-[10px] leading-relaxed {ev.type === 'Warning' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}">
+                                                                <span class="font-mono">{ev.age ?? ''} [{ev.reason ?? ev.type ?? ''}]</span> {ev.message ?? ''}
+                                                            </div>
+                                                        {/each}
+                                                    </div>
+                                                {:else}
+                                                    <div class="text-[10px] text-muted-foreground">No recent events.</div>
+                                                {/if}
+                                            {/if}
+                                        </div>
                                     {/if}
-                                    <span class="shrink-0 text-muted-foreground text-[10px]">{d.age}</span>
-                                    <Button variant="ghost" size="icon" class="size-6 shrink-0 text-destructive hover:bg-destructive/10" disabled={deployDeleteBusy}
-                                        onclick={() => destroyDeployment(d.name)}>
-                                        <Trash2 class="size-3.5" />
-                                    </Button>
                                 </div>
                             {/each}
                         </div>
