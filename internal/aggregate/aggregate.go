@@ -14,6 +14,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
+
 	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/upstream"
 )
 
@@ -415,7 +417,7 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org/repo/branch required")
 		return
 	}
-	if bad, ok := requireComponents(
+	if bad, ok := naming.Require(
 		[2]string{"org", b.Org}, [2]string{"repo", b.Repo}, [2]string{"branch", b.Branch},
 	); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
@@ -448,7 +450,7 @@ func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "branch required")
 		return
 	}
-	if bad, ok := requireComponents([2]string{"branch", b.Branch}); !ok {
+	if bad, ok := naming.Require([2]string{"branch", b.Branch}); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
@@ -749,7 +751,7 @@ func (a *API) ensureOrg(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org required")
 		return
 	}
-	if bad, ok := requireComponents([2]string{"org", b.Org}); !ok {
+	if bad, ok := naming.Require([2]string{"org", b.Org}); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
@@ -772,7 +774,7 @@ func (a *API) ensureRepo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org/repo required")
 		return
 	}
-	if bad, ok := requireComponents(
+	if bad, ok := naming.Require(
 		[2]string{"org", b.Org}, [2]string{"repo", b.Repo},
 	); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
@@ -801,7 +803,7 @@ func (a *API) cloneRepo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "org/repo/git_url required")
 		return
 	}
-	if bad, ok := requireComponents(
+	if bad, ok := naming.Require(
 		[2]string{"org", b.Org}, [2]string{"repo", b.Repo},
 	); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
@@ -838,7 +840,7 @@ func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 	if b.TargetBranch == "" {
 		b.TargetBranch = b.SourceBranch
 	}
-	if bad, ok := requireComponents(
+	if bad, ok := naming.Require(
 		[2]string{"source_org", b.SourceOrg}, [2]string{"source_repo", b.SourceRepo},
 		[2]string{"target_org", b.TargetOrg}, [2]string{"target_repo", b.TargetRepo},
 		[2]string{"source_branch", b.SourceBranch}, [2]string{"target_branch", b.TargetBranch},

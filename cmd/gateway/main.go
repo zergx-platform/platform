@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+
 	"os/signal"
 	"strings"
 	"syscall"
@@ -18,11 +19,11 @@ import (
 	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/proxy"
 	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/upstream"
 	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/web"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/env"
 )
 
 func main() {
-	env := func(k string) string { return os.Getenv(k) }
-	up := upstream.FromEnv(env)
+	up := upstream.FromEnv(os.Getenv)
 	api := &aggregate.API{Up: up}
 
 	type pair = struct {
@@ -86,7 +87,7 @@ func main() {
 		fileServer("web/dist", r)
 	}
 
-	port := envOr("RUCODER_PORT", "8080")
+	port := env.Or("RUCODER_PORT", "8080")
 	srv := &http.Server{Addr: ":" + port, Handler: r}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -175,11 +176,4 @@ func serve(handler http.Handler, r chi.Router) {
 		handler.ServeHTTP(w, req)
 	})
 	r.Handle("/*", handler)
-}
-
-func envOr(k, d string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return d
 }

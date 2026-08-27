@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"forgejo.develop.10.199.64.20.nip.io/rucoder/gateway-go/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/rucoder/go-shared/naming"
 )
 
 type fakeBackends struct {
@@ -366,8 +367,8 @@ func TestValidComponentRules(t *testing.T) {
 		{strings.Repeat("a", 128), true}, {strings.Repeat("a", 129), false},
 	}
 	for _, c := range cases {
-		if got := validComponent(c.in); got != c.want {
-			t.Errorf("validComponent(%q) = %v, want %v", c.in, got, c.want)
+		if got := naming.ValidComponent(c.in); got != c.want {
+			t.Errorf("naming.ValidComponent(%q) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }
