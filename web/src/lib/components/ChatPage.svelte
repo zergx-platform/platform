@@ -69,6 +69,38 @@ let todos = $state<Todo[]>([])
 let containerRow = $state<ContainerInfo | null>(null)
 let containerLoading = $state(false)
 
+// Track an anchor message id across a "load earlier" so we can restore the
+// scroll offset after history is prepended (the list grows from the top,
+// which would otherwise visually jump).
+let loadingMore = false
+
+async function loadEarlier() {
+  if (!msgHook || !scrollEl || loadingMore) return
+  loadingMore = true
+  // Anchor: the topmost message currently rendered; remember its DOM offset
+  // so we can realign the viewport to the same content after the prepend.
+  const anchorEl = scrollEl.querySelector('[data-msg-id]') as HTMLElement | null
+  const anchorTop = anchorEl ? anchorEl.offsetTop : 0
+  const prevScrollTop = scrollEl.scrollTop
+  await msgHook.loadMore()
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))
+  if (anchorEl) {
+    // New top content pushed anchorEl down by (newHeight - oldHeight);
+    // keep the same visual position by shifting scrollTop accordingly.
+    const delta = anchorEl.offsetTop - anchorTop
+    scrollEl.scrollTop = prevScrollTop + delta
+  }
+  loadingMore = false
+}
+
+function handlePanelScroll() {
+  if (!scrollEl || !msgHook || loadingMore) return
+  // Near the top and there is more history → auto-load older messages.
+  if (scrollEl.scrollTop < 80 && msgHook.hasMore && !msgHook.loading) {
+    void loadEarlier()
+  }
+}
+
 onMount(() => {
   loadModels()
   loadPresets()
@@ -585,10 +617,10 @@ async function compact() {
 
         <!-- Main chat column -->
         <div class="flex flex-col h-full flex-1 min-w-0">
-            <div class="flex-1 overflow-y-auto px-3 sm:px-4 py-2" bind:this={scrollEl}>
+            <div class="flex-1 overflow-y-auto px-3 sm:px-4 py-2" bind:this={scrollEl} onscroll={handlePanelScroll}>
                 {#if msgHook && msgHook.hasMore}
                     <div class="text-center py-2">
-                        <Button variant="ghost" size="sm" onclick={() => msgHook?.loadMore()} disabled={msgHook.loading}>
+                        <Button variant="ghost" size="sm" onclick={() => loadEarlier()} disabled={msgHook.loading}>
                             {msgHook.loading ? "Loading..." : "Load earlier"}
                         </Button>
                     </div>

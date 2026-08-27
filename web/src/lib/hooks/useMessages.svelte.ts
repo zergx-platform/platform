@@ -489,7 +489,11 @@ export function createMessages(sessionId: () => string) {
     if (!hasMore || loading) return
     const first = sortedMsgs.find(m => m.status === 'complete')
     if (!first) return
-    await fetchMessages(first.id)
+    // Capture the id of the message currently anchoring the viewport so the
+    // caller can restore scroll position after prepending history.
+    const anchorId = first.id
+    await fetchMessages(anchorId)
+    return anchorId
   }
 
   async function abort(): Promise<void> {

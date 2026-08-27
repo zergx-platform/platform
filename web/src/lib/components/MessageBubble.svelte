@@ -35,7 +35,7 @@ function handleCopy() {
 }
 </script>
 
-<div class="flex flex-col mb-3 {isUser ? 'items-end' : 'items-start'}">
+<div class="flex flex-col mb-3 {isUser ? 'items-end' : 'items-start'}" data-msg-id={msg.id}>
     <div
         class="max-w-[90%] sm:max-w-[80%] rounded-lg px-3 sm:px-4 py-2.5 text-sm space-y-1.5 relative select-text overflow-hidden min-w-0 {isError ? 'border border-destructive/40 bg-destructive/10' : isUser ? 'bg-primary/10 border' : isStreaming ? 'bg-muted border' : 'bg-card border border-border'}"
     >

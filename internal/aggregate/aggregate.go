@@ -585,6 +585,12 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 			Role      string `json:"role"`
 			Content   string `json:"content"`
 			ToolName  string `json:"tool_name"`
+			ToolParts []struct {
+				Type   string      `json:"type"`
+				Name   string      `json:"name"`
+				Input  interface{} `json:"input"`
+				Result string      `json:"result"`
+			} `json:"tool_parts"`
 			CreatedAt string `json:"created_at"`
 		} `json:"messages"`
 	}
@@ -594,23 +600,41 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []map[string]interface{}{}
 	for _, m := range res.Messages {
-		var parts []map[string]interface{}
-		if m.Role == "compaction" {
-			parts = []map[string]interface{}{{
+		parts := []map[string]interface{}{}
+		if len(m.ToolParts) > 0 {
+			for _, tp := range m.ToolParts {
+				parts = append(parts, map[string]interface{}{
+					"type": "tool",
+					"tool": tp.Name,
+					"state": map[string]interface{}{
+						"status": "complete",
+						"input":  tp.Input,
+						"output": tp.Result,
+					},
+				})
+			}
+		} else if m.Role == "compaction" {
+			parts = append(parts, map[string]interface{}{
 				"type": "compaction",
 				"text": m.Content,
-			}}
+			})
 		} else if m.ToolName != "" {
-			parts = []map[string]interface{}{{
+			parts = append(parts, map[string]interface{}{
 				"type": "tool",
 				"tool": m.ToolName,
 				"state": map[string]interface{}{
 					"status": "complete",
 					"output": m.Content,
 				},
-			}}
-		} else if m.Content != "" || len(out) == 0 {
-			parts = []map[string]interface{}{{"type": "text", "text": m.Content}}
+			})
+		} else if m.Content != "" {
+			parts = append(parts, map[string]interface{}{"type": "text", "text": m.Content})
+		}
+		// Guarantee a non-null parts slice: a tool message with neither
+		// tool_parts nor content would otherwise serialize as JSON null and
+		// break the UI's zod validation for the entire batch.
+		if parts == nil {
+			parts = []map[string]interface{}{}
 		}
 		out = append(out, map[string]interface{}{
 			"id":         m.ID,
