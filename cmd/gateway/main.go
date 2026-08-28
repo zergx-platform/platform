@@ -116,7 +116,7 @@ func aggregateRouter(api *aggregate.API, t *proxy.Table) http.Handler {
 		// Try the aggregate router first on exact paths it owns.
 		aggHandler := agg
 		path := r.URL.Path
-		if ownedByAggregate(path) {
+		if ownedByAggregate(path, r.Method) {
 			aggHandler.ServeHTTP(w, r)
 			return
 		}
@@ -125,7 +125,7 @@ func aggregateRouter(api *aggregate.API, t *proxy.Table) http.Handler {
 	return inner
 }
 
-func ownedByAggregate(path string) bool {
+func ownedByAggregate(path, method string) bool {
 	exact := []string{
 		"/api/v1/repos", "/api/v1/repos/ensure", "/api/v1/repos/ensure-org",
 		"/api/v1/repos/clone", "/api/v1/repos/fork",
@@ -145,6 +145,18 @@ func ownedByAggregate(path string) bool {
 	}
 	if strings.HasPrefix(path, "/api/v1/repos/") && strings.HasSuffix(path, "/session") {
 		return true // bookmark adoption (repo-extension)
+	}
+	// DELETE /api/v1/repos/{org}/{repo}/{bookmark}, /api/v1/repos/{org}/{repo},
+	// /api/v1/repos/{org} are wrapped by the aggregate layer so their matching
+	// agent sessions are also removed (otherwise they linger in "Recent").
+	if method == http.MethodDelete && strings.HasPrefix(path, "/api/v1/repos/") {
+		rest := strings.TrimPrefix(path, "/api/v1/repos/")
+		if rest != "" {
+			segs := strings.Split(strings.Trim(rest, "/"), "/")
+			if len(segs) >= 1 && len(segs) <= 3 {
+				return true
+			}
+		}
 	}
 	// /api/v1/sessions/{id}/{action}: id may itself contain ':' but not '/'
 	if strings.HasPrefix(path, "/api/v1/sessions/") {

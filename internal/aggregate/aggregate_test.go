@@ -334,7 +334,7 @@ func TestInvalidComponentsRejectedFast(t *testing.T) {
 		{"POST", "/sessions", `{"org":"ok","repo":"ok","branch":"trailing."}`},
 		{"POST", "/sessions/acme:api:main/fork", `{"branch":"bad:name"}`},
 		{"POST", "/repos/ensure-org", `{"org":"sp ace"}`},
-		{"POST", "/repos/ensure", `{"org":"ok","repo":"a/b"}`},
+		{"POST", "/repos/ensure", `{"org":"ok","repo":"a..b"}`},
 		{"POST", "/repos/clone", `{"org":"ok","repo":"中文","git_url":"https://x"}`},
 		{"POST", "/repos/fork", `{"source_org":"ok","source_repo":"a","source_branch":"main","target_org":"ok","target_repo":"a","target_branch":"x:y"}`},
 	}
@@ -361,9 +361,10 @@ func TestValidComponentRules(t *testing.T) {
 		want bool
 	}{
 		{"main", true}, {"my.repo", true}, {"v1.2", true}, {"feat-x", true},
+		{"feat/a", true}, {"feat/a/b", true},
 		{"a", true}, {"", false}, {"-lead", false}, {"has:colon", false},
 		{"dot..dot", false}, {"trail.", false}, {"name.lock", false},
-		{"sp ace", false}, {"slash/es", false},
+		{"sp ace", false}, {"/lead", false}, {"trail/", false}, {"a//b", false},
 		{strings.Repeat("a", 128), true}, {strings.Repeat("a", 129), false},
 	}
 	for _, c := range cases {
