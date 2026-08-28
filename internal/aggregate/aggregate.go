@@ -34,6 +34,9 @@ func Router(a *API) http.Handler {
 	r.Post("/repos/clone", a.cloneRepo)
 	r.Post("/repos/fork", a.forkRepo)
 	r.Post("/repos/{org}/{repo}/bookmarks/{bm}/session", a.adoptSession)
+	r.Delete("/repos/{org}/{repo}/{bookmark}", a.deleteBookmark)
+	r.Delete("/repos/{org}/{repo}", a.deleteRepo)
+	r.Delete("/repos/{org}", a.deleteOrg)
 	r.Get("/sessions", a.listSessions)
 	r.Post("/sessions", a.createSession)
 	r.Post("/sessions/{id}/prompt", a.sessionPrompt)
@@ -997,6 +1000,78 @@ func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"session": recSession(map[string]interface{}{"name": name})})
+}
+
+// deleteBookmark deletes a bookmark in jj-server, then removes the matching
+// agent session (org:repo:bookmark) so it disappears from "Recent".
+func (a *API) deleteBookmark(w http.ResponseWriter, r *http.Request) {
+	org := pathParam(r, "org")
+	repo := pathParam(r, "repo")
+	bookmark := pathParam(r, "bookmark")
+
+	// 1. Delete the bookmark in jj-server.
+	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/" + url.PathEscape(bookmark)
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
+		badGateway(w, "jj-server", err)
+		return
+	}
+
+	// 2. Delete the agent session if it exists (best-effort; a missing session
+	// is fine). Interrupting a running turn first is handled by the agent.
+	name := org + ":" + repo + ":" + bookmark
+	_ = a.Up.Agent.JSON(r.Context(), http.MethodDelete, sessPath(name, ""), nil, nil, nil)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": 1})
+}
+
+// deleteRepo deletes a repo in jj-server, then removes every agent session
+// under org:repo:* so they disappear from "Recent".
+func (a *API) deleteRepo(w http.ResponseWriter, r *http.Request) {
+	org := pathParam(r, "org")
+	repo := pathParam(r, "repo")
+
+	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo)
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
+		badGateway(w, "jj-server", err)
+		return
+	}
+
+	a.deleteSessionsFor(r, org+":"+repo+":")
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": 1})
+}
+
+// deleteOrg deletes an org in jj-server, then removes every agent session
+// under org:*:*.
+func (a *API) deleteOrg(w http.ResponseWriter, r *http.Request) {
+	org := pathParam(r, "org")
+
+	path := "/api/v1/repos/" + url.PathEscape(org)
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
+		badGateway(w, "jj-server", err)
+		return
+	}
+
+	a.deleteSessionsFor(r, org+":")
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": 1})
+}
+
+// deleteSessionsFor lists agent sessions and best-effort deletes every one
+// whose name starts with `prefix` ("org:repo:" or "org:").
+func (a *API) deleteSessionsFor(r *http.Request, prefix string) {
+	var list struct {
+		Sessions []map[string]interface{} `json:"sessions"`
+	}
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodGet, "/api/v1/sessions", nil, nil, &list); err != nil {
+		return // best-effort: sessions will be reaped by reconcile later
+	}
+	for _, s := range list.Sessions {
+		name, _ := s["name"].(string)
+		if strings.HasPrefix(name, prefix) {
+			_ = a.Up.Agent.JSON(r.Context(), http.MethodDelete, sessPath(name, ""), nil, nil, nil)
+		}
+	}
 }
 
 var _ = context.Background
