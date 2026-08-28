@@ -82,7 +82,7 @@ func Q(kv ...string) url.Values {
 // Upstreams bundles the service clients.
 type Upstreams struct {
 	Agent    *Client // agent-ts (sessions, presets, providers, models, config)
-	Repo     *Client // jj-server (repos, contents, git inspection)
+	Repo     *Client // jjlab (repos, contents, git inspection)
 	RepoExt  *Client // repo-extension (session-map, workspace ops surface)
 	Ops      *Client // ops-extension (containers, sandbox, build, infra)
 	Artifact *Client // artifact (packages, OCI /v2)
@@ -105,7 +105,7 @@ func FromEnv(env func(string) string) *Upstreams {
 		// Prefer the gateway-specific names; fall back to the chart's
 		// ZERGX_*_URL service map (external-secret).
 		Agent:    New(or("AGENT_URL", "ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80")),
-		Repo:     New(or("REPO_URL", "ZERGX_REPO_MANAGER_URL", "http://repo.zergx.svc.cluster.local:80")),
+		Repo:     New(or("REPO_URL", "ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80")),
 		RepoExt:  New(or("REPOEXT_URL", "ZERGX_REPOEXT_URL", "http://repo-extension.zergx.svc.cluster.local:80")),
 		Ops:      New(or("OPS_URL", "ZERGX_EXECUTOR_URL", "http://ops-extension.zergx.svc.cluster.local:80")),
 		Artifact: New(or("ARTIFACT_URL", "ZERGX_ZOT_URL", "ZERGX_REGISTRY_URL", "http://artifact.zergx.svc.cluster.local")),

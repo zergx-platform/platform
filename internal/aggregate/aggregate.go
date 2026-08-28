@@ -1,5 +1,5 @@
 // Package aggregate: the gateway-owned API face. Each handler fans out to
-// multiple backends (agent / jj-server / repo-extension / ops-extension /
+// multiple backends (agent /  / repo-extension / ops-extension /
 // memory-tools) and merges their results into the UI contract.
 package aggregate
 
@@ -345,7 +345,7 @@ func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var tree jjTree
 	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos", nil, nil, &tree); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	var ext repoExtTree
@@ -650,7 +650,7 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 // sessionChanges: the timeline. Fan-out: repo-extension session-map →
-// jj-server log on that bookmark. jj shape (change_id/commit_id/author/
+// jjlab log on that bookmark. jj shape (change_id/commit_id/author/
 // timestamp/message), newest first.
 func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -677,7 +677,7 @@ func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 		} `json:"commits"`
 	}
 	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos/"+org+"/"+repo+"/log", nil, upstream.Q("limit", "100", "rev", bm), &log); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	// Skip the bootstrap commit (README initial) — the UI timeline starts at
@@ -801,7 +801,7 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 		} `json:"tree"`
 	}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/"+url.PathEscape(branch)+"/tree", nil, nil, &tree); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	prefix := strings.Trim(path, "/")
@@ -864,7 +864,7 @@ func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 	}
 	pth := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/" + url.PathEscape(branch) + "/contents/" + path
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, pth, nil, nil, &res); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	content := res.Content
@@ -892,7 +892,7 @@ func (a *API) ensureOrg(w http.ResponseWriter, r *http.Request) {
 	}
 	var res map[string]interface{}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/ensure-org", b, nil, &res); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -916,7 +916,7 @@ func (a *API) ensureRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/ensure", b, nil, nil); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	var created map[string]interface{}
@@ -945,7 +945,7 @@ func (a *API) cloneRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/clone", b, nil, nil); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	name := b.Org + ":" + b.Repo + ":main"
@@ -991,7 +991,7 @@ func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 		"rev": b.SourceBranch, "branch": b.TargetBranch,
 	}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/"+b.SourceOrg+"/"+b.SourceRepo+"/bookmarks", body, nil, nil); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 	name := b.TargetOrg + ":" + b.TargetRepo + ":" + b.TargetBranch
@@ -1002,17 +1002,17 @@ func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"session": recSession(map[string]interface{}{"name": name})})
 }
 
-// deleteBookmark deletes a bookmark in jj-server, then removes the matching
+// deleteBookmark deletes a bookmark in , then removes the matching
 // agent session (org:repo:bookmark) so it disappears from "Recent".
 func (a *API) deleteBookmark(w http.ResponseWriter, r *http.Request) {
 	org := pathParam(r, "org")
 	repo := pathParam(r, "repo")
 	bookmark := pathParam(r, "bookmark")
 
-	// 1. Delete the bookmark in jj-server.
+	// 1. Delete the bookmark in .
 	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/" + url.PathEscape(bookmark)
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 
@@ -1024,7 +1024,7 @@ func (a *API) deleteBookmark(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": 1})
 }
 
-// deleteRepo deletes a repo in jj-server, then removes every agent session
+// deleteRepo deletes a repo in , then removes every agent session
 // under org:repo:* so they disappear from "Recent".
 func (a *API) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	org := pathParam(r, "org")
@@ -1032,7 +1032,7 @@ func (a *API) deleteRepo(w http.ResponseWriter, r *http.Request) {
 
 	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo)
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 
@@ -1041,14 +1041,14 @@ func (a *API) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": 1})
 }
 
-// deleteOrg deletes an org in jj-server, then removes every agent session
+// deleteOrg deletes an org in , then removes every agent session
 // under org:*:*.
 func (a *API) deleteOrg(w http.ResponseWriter, r *http.Request) {
 	org := pathParam(r, "org")
 
 	path := "/api/v1/repos/" + url.PathEscape(org)
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
-		badGateway(w, "jj-server", err)
+		badGateway(w, "jjlab", err)
 		return
 	}
 

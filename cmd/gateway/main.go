@@ -40,7 +40,7 @@ func main() {
 		pair{"/api/v1/tool-config", up.Agent.Base},
 		pair{"/api/v1/tools", up.Agent.Base},
 		pair{"/api/v1/zergx-config", up.Agent.Base},
-		// jj-server passthroughs (diff/file/file-log/file-diff/delete/org…)
+		// jjlab passthroughs (diff/file/file-log/file-diff/delete/org…)
 		pair{"/api/v1/repos", up.Repo.Base},
 		pair{"/git", up.Repo.Base},
 		pair{"/api/v1/git-blame", up.Repo.Base},
