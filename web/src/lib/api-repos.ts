@@ -34,7 +34,7 @@ export const repos = {
     ).map(r => r.content)
   },
   deleteBookmark: (org: string, repo: string, bookmark: string) =>
-    del(`/api/v1/repos/${org}/${repo}/${bookmark}`),
+    del(`/api/v1/repos/${org}/${repo}/${encodeURIComponent(bookmark)}`),
   deleteRepo: (org: string, repo: string) =>
     del(`/api/v1/repos/${org}/${repo}`),
   deleteOrg: (org: string) => del(`/api/v1/repos/${org}`),
