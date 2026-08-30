@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/aggregate"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/auth"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/proxy"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/web"
@@ -70,6 +71,9 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger, middleware.Recoverer)
+	// Pre-shared-token auth over every /api/v1/** route (SSE included);
+	// no-op when GATEWAY_TOKEN is empty.
+	r.Use(auth.Middleware(os.Getenv("GATEWAY_TOKEN")))
 
 	r.Get("/api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
