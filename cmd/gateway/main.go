@@ -87,6 +87,12 @@ func main() {
 	// Aggregate handlers take precedence; the proxy table serves the rest.
 	r.Mount("/api/v1", aggregateRouter(api, table))
 
+	// OCI registry surface: /v2 is the Docker Distribution API root served by
+	// artifact (e.g. /v2/_catalog for the UI's image-catalog view). It was
+	// registered in the prefix table but never mounted, so /v2/*
+	// fell through to the SPA fallback and 404'd.
+	proxy.Mount(r, table, "/v2")
+
 	// SPA static: embedded dist (WEB_DIST overrides with a local dir for dev)
 	if d := os.Getenv("WEB_DIST"); d != "" {
 		fileServer(d, r)
