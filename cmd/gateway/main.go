@@ -17,6 +17,7 @@ import (
 
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/aggregate"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/auth"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/cors"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/proxy"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/web"
@@ -71,6 +72,9 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger, middleware.Recoverer)
+	// CORS must run before auth so browser preflight OPTIONS is answered
+	// (204 + allow headers) instead of hitting the Bearer-token gate.
+	r.Use(cors.Middleware(os.Getenv("CORS_ALLOW_ORIGIN")))
 	// Pre-shared-token auth over every /api/v1/** route (SSE included);
 	// no-op when GATEWAY_TOKEN is empty.
 	r.Use(auth.Middleware(os.Getenv("GATEWAY_TOKEN")))
