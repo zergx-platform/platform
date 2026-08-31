@@ -1,4 +1,4 @@
-// Package cors adds cross-origin support to the gateway API.
+// Package cors adds cross-origin support to the platform API.
 //
 // The embedded Svelte UI is served same-origin and never needs this, but the
 // standalone Flutter web client is hosted on a different domain and its
@@ -14,14 +14,14 @@ import (
 
 // Middleware returns a CORS middleware that allows a caller-configurable
 // origin (CORS_ALLOW_ORIGIN, default: reflect the request Origin — i.e.
-// allow any origin; the gateway's Bearer-token auth carries no cookies, so
+// allow any origin; the platform's Bearer-token auth carries no cookies, so
 // credentialed "allow all" semantics are not a concern here).
 func Middleware(allowOrigin string) func(http.Handler) http.Handler {
 	allowOrigin = strings.TrimSpace(allowOrigin)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Only API surfaces need CORS; static files come from the
-			// gateway itself and are same-origin.
+			// platform itself and are same-origin.
 			if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/v2/") {
 				next.ServeHTTP(w, r)
 				return

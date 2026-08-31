@@ -1,4 +1,4 @@
-module forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go
+module forgejo.develop.10.199.64.20.nip.io/zergx/platform
 
 go 1.26
 

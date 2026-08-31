@@ -32,12 +32,12 @@ COPY internal internal
 COPY web/embed.go web/embed.go
 COPY --from=web /web/dist web/dist
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -o /out/gateway-go ./cmd/gateway
+    CGO_ENABLED=0 go build -o /out/platform ./cmd/platform
 
 FROM ${REGISTRY}/library/alpine:3.24
 RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
     && apk add --no-cache ca-certificates
-COPY --from=build /out/gateway-go /usr/local/bin/gateway-go
+COPY --from=build /out/platform /usr/local/bin/platform
 ENV ZERGX_PORT=8080
 EXPOSE 8080
-ENTRYPOINT ["gateway-go"]
+ENTRYPOINT ["platform"]

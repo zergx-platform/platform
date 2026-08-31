@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -15,12 +16,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/aggregate"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/auth"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/cors"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/proxy"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/web"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/aggregate"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/auth"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/cors"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/proxy"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/web"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
 )
 
@@ -63,8 +64,6 @@ func main() {
 		pair{"/api/v1/packages", up.Artifact.Base},
 		pair{"/api/v1/packages/publish", up.Ops.Base},
 		pair{"/v2", up.Artifact.Base},
-		// browser
-		pair{"/api/v1/browser", up.Browser.Base},
 	)
 	if err != nil {
 		panic(err)
@@ -75,13 +74,26 @@ func main() {
 	// CORS must run before auth so browser preflight OPTIONS is answered
 	// (204 + allow headers) instead of hitting the Bearer-token gate.
 	r.Use(cors.Middleware(os.Getenv("CORS_ALLOW_ORIGIN")))
-	// Pre-shared-token auth over every /api/v1/** route (SSE included);
-	// no-op when GATEWAY_TOKEN is empty.
-	r.Use(auth.Middleware(os.Getenv("GATEWAY_TOKEN")))
+	// Platform auth: accepts the fixed pre-shared token (GATEWAY_TOKEN) or a
+	// signed login token minted by POST /api/v1/auth/login. Disabled when the
+	// platform credential is empty.
+	authenticator := auth.New(
+		os.Getenv("PLATFORM_CREDENTIAL"),
+		os.Getenv("GATEWAY_TOKEN"),
+		os.Getenv("PLATFORM_TOKEN_SECRET"),
+	)
+	r.Use(authenticator.Middleware())
+
+	// Login is unauthenticated (it is how you obtain a token): mount before
+	// the auth middleware takes effect on other routes. Since auth's Middleware
+	// exempts /api/v1/health only, register login explicitly and exempt its
+	// path inside the authenticator is not needed — we mount it as another
+	// pre-auth route via the same chi router (login runs first).
+	r.Post("/api/v1/auth/login", handleLogin(authenticator))
 
 	r.Get("/api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true,"name":"gateway-go"}`))
+		_, _ = w.Write([]byte(`{"ok":true,"name":"platform"}`))
 	})
 
 	// Aggregate handlers take precedence; the proxy table serves the rest.
@@ -112,7 +124,7 @@ func main() {
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
 	}()
-	fmt.Printf("[gateway-go] listening on :%s (agent=%s repo=%s repoext=%s ops=%s artifact=%s)\n",
+	fmt.Printf("[platform] listening on :%s (agent=%s repo=%s repoext=%s ops=%s artifact=%s)\n",
 		port, up.Agent.Base, up.Repo.Base, up.RepoExt.Base, up.Ops.Base, up.Artifact.Base)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		panic(err)
@@ -182,6 +194,28 @@ func ownedByAggregate(path, method string) bool {
 		}
 	}
 	return false
+}
+
+func handleLogin(a *auth.Authenticator) http.HandlerFunc {
+	type loginReq struct {
+		Credential string `json:"credential"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var b loginReq
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Credential == "" {
+			http.Error(w, `{"ok":false,"error":"credential required"}`, http.StatusBadRequest)
+			return
+		}
+		token, ok := a.Login(b.Credential)
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"ok":false,"error":"invalid credential"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"token":"` + token + `"}`))
+	}
 }
 
 func fileServer(dir string, r chi.Router) {

@@ -1,10 +1,10 @@
-// Package auth provides the gateway's opt-in pre-shared-token middleware.
+// Package auth provides the platform's opt-in pre-shared-token middleware.
 //
 // When GATEWAY_TOKEN is set (non-empty), every /api/v1/** route — including
 // the SSE stream — requires `Authorization: Bearer <token>`. A constant-time
 // compare prevents timing side channels. /api/v1/health stays open so
 // liveness probes never need a token. When GATEWAY_TOKEN is empty the
-// middleware is a no-op (trusted-network default), so a dev gateway keeps
+// middleware is a no-op (trusted-network default), so a dev platform keeps
 // working exactly as before.
 package auth
 

@@ -1,5 +1,5 @@
 // Package upstream holds thin HTTP clients for the services behind the
-// gateway. Each client returns raw decoded JSON plus status; shape mapping
+// platform. Each client returns raw decoded JSON plus status; shape mapping
 // lives in aggregate.
 package upstream
 
@@ -44,6 +44,14 @@ func (c *Client) Raw(ctx context.Context, method, path string, body interface{},
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	// The agent's NATS/SSE surfaces don't require the platform bearer token;
+	// propagate it only when the caller-supplied header is present, so a
+	// service that does enforce auth (none today) can read it.
+	if h := ctx.Value(upstreamTokenKey{}); h != nil {
+		if s, ok := h.(string); ok && s != "" {
+			req.Header.Set("Authorization", s)
+		}
+	}
 	resp, err := c.HC.Do(req)
 	if err != nil {
 		return 0, nil, err
@@ -54,6 +62,14 @@ func (c *Client) Raw(ctx context.Context, method, path string, body interface{},
 		return resp.StatusCode, nil, err
 	}
 	return resp.StatusCode, data, nil
+}
+
+type upstreamTokenKey struct{}
+
+// WithToken returns a context that forwards the given authorization value to
+// upstreams on every Raw/JSON request originating from it.
+func WithToken(ctx context.Context, authorization string) context.Context {
+	return context.WithValue(ctx, upstreamTokenKey{}, authorization)
 }
 
 // JSON performs a request and decodes the response body into out.
@@ -86,7 +102,6 @@ type Upstreams struct {
 	RepoExt  *Client // repo-extension (session-map, workspace ops surface)
 	Ops      *Client // ops-extension (containers, sandbox, build, infra)
 	Artifact *Client // artifact (packages, OCI /v2)
-	Browser  *Client // browser-extension
 	Memory   *Client // memory-tools (todos)
 }
 
@@ -101,15 +116,14 @@ func FromEnv(env func(string) string) *Upstreams {
 		}
 		return keys[len(keys)-1]
 	}
-	return &Upstreams{
-		// Prefer the gateway-specific names; fall back to the chart's
+return &Upstreams{
+		// Prefer the platform-specific names; fall back to the chart's
 		// ZERGX_*_URL service map (external-secret).
 		Agent:    New(or("AGENT_URL", "ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80")),
 		Repo:     New(or("REPO_URL", "ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80")),
 		RepoExt:  New(or("REPOEXT_URL", "ZERGX_REPOEXT_URL", "http://repo-extension.zergx.svc.cluster.local:80")),
 		Ops:      New(or("OPS_URL", "ZERGX_EXECUTOR_URL", "http://ops-extension.zergx.svc.cluster.local:80")),
-		Artifact: New(or("ARTIFACT_URL", "ZERGX_ZOT_URL", "ZERGX_REGISTRY_URL", "http://artifact.zergx.svc.cluster.local")),
-		Browser:  New(or("BROWSER_URL", "ZERGX_BROWSER_URL", "http://browser-extension.zergx.svc.cluster.local:80")),
+		Artifact: New(or("ARTIFACT_URL", "ZERGX_REGISTRY_URL", "http://artifact.zergx.svc.cluster.local")),
 		Memory:   New(or("MEMORY_URL", "ZERGX_MEMORY_URL", "http://memory-tools.zergx.svc.cluster.local:80")),
 	}
 }

@@ -369,7 +369,7 @@ async function createBoundContainer() {
   if (!s) return
   containerLoading = true
   // Sandboxes are created lazily by the first sandbox tool call; a no-op exec
-  // through the gateway warms it up on demand.
+  // through the platform warms it up on demand.
   await api.containers.exec(`${s.org}:${s.repo}:${s.branch}`, 'true')
   await loadContainer(store.activeSessionId)
   containerLoading = false

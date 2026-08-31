@@ -3,7 +3,7 @@
  *
  * POST /api/v1/images/build and /api/v1/packages/publish both return
  * {ok, build_id} immediately and run the task in the background; the
- * gateway proxies ops-extension's SSE endpoint /api/v1/builds/{id}/stream
+ * platform proxies ops-extension's SSE endpoint /api/v1/builds/{id}/stream
  * which replays existing log lines and streams new ones until the task
  * finishes (terminal `done` event carries state/image/error).
  */

@@ -1,4 +1,4 @@
-// Package aggregate: the gateway-owned API face. Each handler fans out to
+// Package aggregate: the platform-owned API face. Each handler fans out to
 // multiple backends (agent /  / repo-extension / ops-extension /
 // memory-tools) and merges their results into the UI contract.
 package aggregate
@@ -19,7 +19,7 @@ import (
 
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
 )
 
 type API struct {
@@ -276,7 +276,10 @@ func qOpt(kv ...string) url.Values {
 }
 
 // recSession maps an agent session row into the UI Session shape, filling
-// org/repo/branch from the name convention.
+// org/repo/branch from the name convention. All agent-owned fields pass
+// through verbatim (the agent is the source of truth); the platform only adds
+// the workspace naming split and the legacy-null cursor/worker placeholders the
+// UI still reads.
 func recSession(m map[string]interface{}) map[string]interface{} {
 	str := func(k string) interface{} {
 		v, _ := m[k].(string)
@@ -302,10 +305,8 @@ func recSession(m map[string]interface{}) map[string]interface{} {
 		"fork_at_msg_id": nil,
 		"worker_url":     nil,
 		"container_id":   nil,
-		"max_turns":      nil,
-		"system_prompt":  nil,
-		"base_image":     nil,
-		"unread":         0,
+		"max_turns":      num("max_turns"),
+		"system_prompt":  str("system_prompt"),
 		"input_tokens":   num("input_tokens"),
 		"output_tokens":  num("output_tokens"),
 		"total_tokens":   num("total_tokens"),

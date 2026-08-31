@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"forgejo.develop.10.199.64.20.nip.io/zergx/gateway-go/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 )
 
@@ -375,7 +375,7 @@ func TestValidComponentRules(t *testing.T) {
 }
 
 // TestEscapedSessionIDsForwardDecoded pins the UI's encodeURIComponent'd
-// session ids: chi returns the raw %3A segment, so the gateway must decode
+// session ids: chi returns the raw %3A segment, so the platform must decode
 // before matching/re-forwarding. Before the fix, timelines failed with a
 // double-encoded session-map lookup, todos read a stale key that never
 // matched the NATS-written rows, and fork always rejected the name.
@@ -522,7 +522,7 @@ func TestFsDefaultsToConventionalBranch(t *testing.T) {
 			_, _ = w.Write([]byte(`{"orgs":[{"org":"build","repos":[{"repo":"svc","bookmarks":[{"branch":"master"},{"branch":"dev"}]}]}]}`))
 			return
 		}
-		// Whatever branch the gateway asks the tree for, echo it back.
+		// Whatever branch the platform asks the tree for, echo it back.
 		if strings.Contains(r.URL.Path, "/tree") {
 			used := strings.Split(r.URL.Path, "/")[6]
 			_, _ = w.Write([]byte(`{"tree":[{"path":"go.mod","type":"blob","size":10}]}`))
