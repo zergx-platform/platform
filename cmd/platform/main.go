@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -16,18 +17,44 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/bus"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/manifest"
+	natsbus "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/transport/nats"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/aggregate"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/auth"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/cors"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/proxy"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/sessionstate"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/web"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
 )
 
 func main() {
 	up := upstream.FromEnv(os.Getenv)
 	api := &aggregate.API{Up: up}
+
+	// Session-state store: message facts from the agent + read watermarks of
+	// our own, both carried by the abc Bus. Optional: startup continues when
+	// NATS is unreachable (chat list renders without preview/unread) and the
+	// bus reconnect logic inside the SDK retries in the background.
+	var states *sessionstate.Store
+	var natsBus bus.Bus
+	if os.Getenv("ZERGX_DISABLE_NATS") != "1" {
+		natsURL := os.Getenv("NATS_URL")
+		if natsURL == "" {
+			natsURL = "nats://nats.zergx.svc.cluster.local:4222"
+		}
+		b, err := natsbus.Connect(natsURL)
+		if err != nil {
+			slog.Warn("nats connect failed — chat-list extras disabled", "err", err)
+		} else {
+			natsBus = b
+			states = sessionstate.New(b, up.Agent)
+		}
+	}
+	api.States = states
 
 	type pair = struct {
 		Prefix string
@@ -96,8 +123,35 @@ func main() {
 		_, _ = w.Write([]byte(`{"ok":true,"name":"platform"}`))
 	})
 
+	// Attach the extension shell AFTER the server wiring: a minimal manifest
+	// (no tools/hooks) gives the state store the SDK's canonical
+	// session-variable writer for read watermarks.
+	if states != nil {
+		const platformManifest = `id: platform
+version: 0.1.0
+`
+		if m, err := manifest.ParseManifest([]byte(platformManifest)); err != nil {
+			slog.Warn("platform manifest parse failed — read watermarks disabled", "err", err)
+		} else {
+			states.SetExt(extension.New(natsBus, m.BuildConfig(manifest.Bindings{})))
+		}
+	}
+
 	// Aggregate handlers take precedence; the proxy table serves the rest.
 	r.Mount("/api/v1", aggregateRouter(api, table))
+
+	if states != nil {
+		// A minimal extension shell (no tools, no hooks) gives the store the
+		// SDK's canonical session-variable writer for its read watermarks.
+		const platformManifest = `id: platform
+version: 0.1.0
+`
+		if m, err := manifest.ParseManifest([]byte(platformManifest)); err == nil {
+			states.SetExt(extension.New(natsBus, m.BuildConfig(manifest.Bindings{})))
+		} else {
+			slog.Warn("platform manifest parse failed — read watermarks disabled", "err", err)
+		}
+	}
 
 	// OCI registry surface: /v2 is the Docker Distribution API root served by
 	// artifact (e.g. /v2/_catalog for the UI's image-catalog view). It was
@@ -187,7 +241,7 @@ func ownedByAggregate(path, method string) bool {
 	// /api/v1/sessions/{id}/{action}: id may itself contain ':' but not '/'
 	if strings.HasPrefix(path, "/api/v1/sessions/") {
 		sub := strings.TrimPrefix(path, "/api/v1/sessions/")
-		for _, action := range []string{"messages", "changes", "todos", "fork", "prompt", "compact", "settings"} {
+		for _, action := range []string{"messages", "changes", "todos", "fork", "prompt", "compact", "settings", "read"} {
 			if strings.HasSuffix(sub, "/"+action) {
 				return true
 			}

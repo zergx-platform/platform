@@ -15,12 +15,21 @@ import (
 )
 
 type Client struct {
-	Base string
-	HC   *http.Client
+	Base  string
+	HC    *http.Client
+	Auth  string // optional fixed Authorization header (e.g. "token <t>" for jjlab)
+	Token string // optional bearer/token value for jjlab-style "token <v>" auth
 }
 
 func New(base string) *Client {
 	return &Client{Base: base, HC: &http.Client{Timeout: 30 * time.Second}}
+}
+
+// WithToken returns a client that sends `Authorization: token <t>` on every
+// request (Gitea-style static-token auth, used by jjlab).
+func (c *Client) WithToken(token string) *Client {
+	c.Token = token
+	return c
 }
 
 // Raw performs a request and returns status + body bytes (caller decodes).
@@ -44,10 +53,11 @@ func (c *Client) Raw(ctx context.Context, method, path string, body interface{},
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	// The agent's NATS/SSE surfaces don't require the platform bearer token;
-	// propagate it only when the caller-supplied header is present, so a
-	// service that does enforce auth (none today) can read it.
-	if h := ctx.Value(upstreamTokenKey{}); h != nil {
+	// A per-client token (jjlab "token <t>") takes precedence over any
+	// request-scoped authorization from WithToken.
+	if c.Token != "" {
+		req.Header.Set("Authorization", "token "+c.Token)
+	} else if h := ctx.Value(upstreamTokenKey{}); h != nil {
 		if s, ok := h.(string); ok && s != "" {
 			req.Header.Set("Authorization", s)
 		}
@@ -116,11 +126,11 @@ func FromEnv(env func(string) string) *Upstreams {
 		}
 		return keys[len(keys)-1]
 	}
-return &Upstreams{
+	return &Upstreams{
 		// Prefer the platform-specific names; fall back to the chart's
 		// ZERGX_*_URL service map (external-secret).
 		Agent:    New(or("AGENT_URL", "ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80")),
-		Repo:     New(or("REPO_URL", "ZERGX_REPO_MANAGER_URL", "http://jjlab.zergx.svc.cluster.local:80")),
+		Repo:     New(or("REPO_URL", "ZERGX_JJ_SERVER_URL", "ZERGX_REPO_MANAGER_URL", "http://jj-lab.temp.svc.cluster.local:80")).WithToken(or("JJLAB_TOKEN", "ZERGX_JJLAB_TOKEN", "devtoken")),
 		RepoExt:  New(or("REPOEXT_URL", "ZERGX_REPOEXT_URL", "http://repo-extension.zergx.svc.cluster.local:80")),
 		Ops:      New(or("OPS_URL", "ZERGX_EXECUTOR_URL", "http://ops-extension.zergx.svc.cluster.local:80")),
 		Artifact: New(or("ARTIFACT_URL", "ZERGX_REGISTRY_URL", "http://artifact.zergx.svc.cluster.local")),

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -19,11 +20,16 @@ import (
 
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
 
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/sessionstate"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
 )
 
 type API struct {
 	Up *upstream.Upstreams
+	// States carries per-session message facts + read watermarks off the
+	// abc Bus. Optional: nil in tests → sessions render without the
+	// chat-list extras (preview/unread).
+	States *sessionstate.Store
 }
 
 func Router(a *API) http.Handler {
@@ -40,6 +46,7 @@ func Router(a *API) http.Handler {
 	r.Get("/sessions", a.listSessions)
 	r.Post("/sessions", a.createSession)
 	r.Post("/sessions/{id}/prompt", a.sessionPrompt)
+	r.Post("/sessions/{id}/read", a.sessionRead)
 	r.Get("/sessions/{id}/messages", a.listMessages)
 	r.Post("/sessions/{id}/compact", a.compactSession)
 	r.Get("/sessions/{id}/changes", a.sessionChanges)
@@ -294,41 +301,30 @@ func recSession(m map[string]interface{}) map[string]interface{} {
 	name, _ := m["name"].(string)
 	org, repo, branch, _ := parseTriple(name)
 	return map[string]interface{}{
-		"id":             name,
-		"org":            org,
-		"repo":           repo,
-		"branch":         branch,
-		"model":          str("model"),
-		"preset":         str("preset"),
-		"parent_id":      nil,
-		"tip_id":         m["tip_id"],
-		"fork_at_msg_id": nil,
-		"worker_url":     nil,
-		"container_id":   nil,
-		"max_turns":      num("max_turns"),
-		"system_prompt":  str("system_prompt"),
-		"input_tokens":   num("input_tokens"),
-		"output_tokens":  num("output_tokens"),
-		"total_tokens":   num("total_tokens"),
-		"created_at":     str("created_at"),
-		"updated_at":     str("updated_at"),
+		"id":            name,
+		"org":           org,
+		"repo":          repo,
+		"branch":        branch,
+		"model":         str("model"),
+		"preset":        str("preset"),
+		"tip_id":        m["tip_id"],
+		"max_turns":     num("max_turns"),
+		"system_prompt": str("system_prompt"),
+		"input_tokens":  num("input_tokens"),
+		"output_tokens": num("output_tokens"),
+		"total_tokens":  num("total_tokens"),
+		"created_at":    str("created_at"),
+		"updated_at":    str("updated_at"),
 	}
 }
 
-// ---- GET /repos: merge jj tree + repo-extension bindings + agent sessions ----
+// ---- GET /repos: merge repo-extension tree (bookmarks + session binding)
+// with agent sessions (model/preset). repo-extension already fans out the new
+// jjlab directory (`GET /repos` + per-repo `GET /branches`), so the platform
+// no longer re-walks the jj tree itself.
 
-type jjTree struct {
-	Orgs []struct {
-		Org   string `json:"org"`
-		Repos []struct {
-			Repo      string `json:"repo"`
-			Bookmarks []struct {
-				Branch string `json:"branch"`
-			} `json:"bookmarks"`
-		} `json:"repos"`
-	} `json:"orgs"`
-}
-
+// repoExtTree is repo-extension's GET /repos shape: org → repo → bookmarks
+// with an optional bound session_name.
 type repoExtTree struct {
 	Orgs []struct {
 		Org   string `json:"org"`
@@ -344,24 +340,10 @@ type repoExtTree struct {
 
 func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	var tree jjTree
-	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos", nil, nil, &tree); err != nil {
-		badGateway(w, "jjlab", err)
-		return
-	}
 	var ext repoExtTree
-	_ = a.Up.RepoExt.JSON(ctx, http.MethodGet, "/api/v1/repos", nil, nil, &ext) // best-effort
-
-	// session_name per org/repo/bookmark from repo-extension
-	bound := map[string]string{}
-	for _, o := range ext.Orgs {
-		for _, rp := range o.Repos {
-			for _, bm := range rp.Bookmarks {
-				if s, ok := bm.SessionName.(string); ok && s != "" {
-					bound[o.Org+"/"+rp.Repo+"/"+bm.Branch] = s
-				}
-			}
-		}
+	if err := a.Up.RepoExt.JSON(ctx, http.MethodGet, "/api/v1/repos", nil, nil, &ext); err != nil {
+		badGateway(w, "repo-extension", err)
+		return
 	}
 
 	// agent sessions by name (for model/preset on bound bookmarks)
@@ -377,13 +359,13 @@ func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orgs := []map[string]interface{}{}
-	for _, o := range tree.Orgs {
+	for _, o := range ext.Orgs {
 		repos := []map[string]interface{}{}
 		for _, rp := range o.Repos {
 			bms := []map[string]interface{}{}
 			for _, bm := range rp.Bookmarks {
 				var sess interface{}
-				if sn, ok := bound[o.Org+"/"+rp.Repo+"/"+bm.Branch]; ok {
+				if sn, ok := bm.SessionName.(string); ok && sn != "" {
 					if row, live := byName[sn]; live {
 						s := recSession(row)
 						sess = map[string]interface{}{
@@ -392,7 +374,6 @@ func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 							"message_count": 0,
 							"model":         s["model"],
 							"preset":        s["preset"],
-							"parent_id":     nil,
 						}
 					} else {
 						// bound but agent session gone (drift window)
@@ -435,10 +416,51 @@ func (a *API) listSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := []map[string]interface{}{}
+	if a.States != nil {
+		names := make([]string, 0, len(list.Sessions))
+		for _, s := range list.Sessions {
+			if n, ok := s["name"].(string); ok {
+				names = append(names, n)
+			}
+		}
+		a.States.RefineUnread(r.Context(), names)
+	}
+	snap := map[string]sessionstate.Session{}
+	if a.States != nil {
+		names := make([]string, 0, len(list.Sessions))
+		for _, s := range list.Sessions {
+			if n, ok := s["name"].(string); ok {
+				names = append(names, n)
+			}
+		}
+		snap = a.States.Snapshot(names)
+	}
 	for _, s := range list.Sessions {
-		out = append(out, recSession(s))
+		row := recSession(s)
+		if a.States != nil {
+			if n, ok := s["name"].(string); ok {
+				if ss, ok := snap[n]; ok {
+					mergeSessionState(row, ss)
+				}
+			}
+		}
+		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"sessions": out})
+}
+
+// mergeSessionState folds bus-carried chat-list facts into a UI session row.
+func mergeSessionState(row map[string]interface{}, ss sessionstate.Session) {
+	if ss.LastMessageAt != "" {
+		row["last_message_at"] = ss.LastMessageAt
+	}
+	if ss.LastMessagePrev != "" {
+		row["last_message_preview"] = ss.LastMessagePrev
+	}
+	if ss.UnreadCount > 0 {
+		row["unread_count"] = ss.UnreadCount
+		row["unread_calculated"] = ss.UnreadCalculated
+	}
 }
 
 func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
@@ -543,6 +565,24 @@ func (a *API) sessionSettings(w http.ResponseWriter, r *http.Request) {
 // sessionPrompt forwards the prompt and synthesizes {ok, messageId}: the
 // agent only replies {ok}; the UI needs the id to swap its optimistic
 // pending user message.
+// sessionRead records the read watermark on the platform side (bus vars KV
+// under our extension id). The agent is never called: read/unread semantics
+// live entirely here.
+func (a *API) sessionRead(w http.ResponseWriter, r *http.Request) {
+	id := pathParam(r, "id")
+	if a.States == nil {
+		// States unavailable (e.g. tests): accept and no-op so the UI flow
+		// keeps working.
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+		return
+	}
+	if err := a.States.MarkRead(r.Context(), id); err != nil {
+		badGateway(w, "bus", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+}
+
 func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
 	var b struct {
@@ -670,14 +710,14 @@ func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 	}
 	var log struct {
 		Commits []struct {
-			ChangeID  string `json:"change_id"`
-			CommitID  string `json:"commit_id"`
-			Author    string `json:"author"`
-			Timestamp string `json:"timestamp"`
-			Message   string `json:"message"`
+			ChangeID    string `json:"change_id"`
+			CommitID    string `json:"sha"`
+			Author      string `json:"author"`
+			Timestamp   string `json:"timestamp"`
+			Description string `json:"description"`
 		} `json:"commits"`
 	}
-	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos/"+org+"/"+repo+"/log", nil, upstream.Q("limit", "100", "rev", bm), &log); err != nil {
+	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos/"+org+"/"+repo+"/commits", nil, upstream.Q("limit", "100", "rev", bm), &log); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
@@ -685,7 +725,7 @@ func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 	// real work; keep everything, the UI renders messages anyway.
 	changes := []map[string]interface{}{}
 	for _, c := range log.Commits {
-		if strings.HasPrefix(c.Message, "initial commit") {
+		if strings.HasPrefix(c.Description, "initial commit") {
 			continue
 		}
 		changes = append(changes, map[string]interface{}{
@@ -693,7 +733,7 @@ func (a *API) sessionChanges(w http.ResponseWriter, r *http.Request) {
 			"commit_id": c.CommitID,
 			"author":    c.Author,
 			"timestamp": c.Timestamp,
-			"message":   c.Message,
+			"message":   c.Description,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"changes": changes})
@@ -723,8 +763,9 @@ type dbEntry struct {
 }
 
 // resolveBranch returns the given branch, or the repo's conventional default
-// bookmark when empty. Repos like the build org only carry dev/master, so a
-// hardcoded "main" would 404 every fs read.
+// bookmark when empty. The new jjlab has no bookmarks in its `GET /repos`
+// directory, so resolve via `GET /repos/{org}/{repo}/branches` (each branch
+// carries name+sha) and pick main/master/dev/first.
 func (a *API) resolveBranch(ctx context.Context, org, repo, branch string) string {
 	if branch != "" {
 		return branch
@@ -737,47 +778,32 @@ func (a *API) resolveBranch(ctx context.Context, org, repo, branch string) strin
 	}
 	dbMu.Unlock()
 
-	var tree struct {
-		Orgs []struct {
-			Org   string `json:"org"`
-			Repos []struct {
-				Repo      string `json:"repo"`
-				Bookmarks []struct {
-					Branch string `json:"branch"`
-				} `json:"bookmarks"`
-			} `json:"repos"`
-		} `json:"orgs"`
+	var branches struct {
+		Branches []struct {
+			Name string `json:"name"`
+			Sha  string `json:"sha"`
+		} `json:"branches"`
 	}
 	out := ""
-	if err := a.Up.Repo.JSON(ctx, http.MethodGet, "/api/v1/repos", nil, nil, &tree); err == nil {
-		for _, o := range tree.Orgs {
-			if o.Org != org {
-				continue
+	if err := a.Up.Repo.JSON(ctx, http.MethodGet,
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/branches",
+		nil, nil, &branches); err == nil {
+		names := map[string]bool{}
+		var first string
+		for _, b := range branches.Branches {
+			if first == "" {
+				first = b.Name
 			}
-			for _, rp := range o.Repos {
-				if rp.Repo != repo {
-					continue
-				}
-				names := map[string]bool{}
-				var first string
-				for _, bm := range rp.Bookmarks {
-					if first == "" {
-						first = bm.Branch
-					}
-					names[bm.Branch] = true
-				}
-				for _, pref := range []string{"main", "master", "dev"} {
-					if names[pref] {
-						out = pref
-						break
-					}
-				}
-				if out == "" {
-					out = first
-				}
+			names[b.Name] = true
+		}
+		for _, pref := range []string{"main", "master", "dev"} {
+			if names[pref] {
+				out = pref
 				break
 			}
-			break
+		}
+		if out == "" {
+			out = first
 		}
 	}
 	dbMu.Lock()
@@ -794,14 +820,18 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	branch = a.resolveBranch(r.Context(), org, repo, branch)
+	// New jjlab `GET /repos/{org}/{repo}/tree/{sha}` lists the whole tree
+	// (kind "tree"/"file"); the sha may be empty (default) or a branch name
+	// (resolve_snapshot resolves tags/bookmarks/sha). Use the branch name as
+	// the rev.
 	var tree struct {
 		Tree []struct {
 			Path string `json:"path"`
-			Type string `json:"type"`
+			Kind string `json:"kind"`
 			Size int64  `json:"size"`
 		} `json:"tree"`
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/"+url.PathEscape(branch)+"/tree", nil, nil, &tree); err != nil {
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/tree/"+url.PathEscape(branch), nil, nil, &tree); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
@@ -817,7 +847,7 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 			p = strings.TrimPrefix(p, prefix+"/")
 		}
 		name := p
-		isDir := e.Type == "tree"
+		isDir := e.Kind == "tree"
 		if idx := strings.IndexByte(p, '/'); idx >= 0 {
 			name = p[:idx]
 			isDir = true
@@ -859,12 +889,14 @@ func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	branch = a.resolveBranch(r.Context(), org, repo, branch)
+	// New jjlab `GET /repos/{org}/{repo}/contents/{path}?ref=` returns a
+	// Gitea-style entry (base64 content) at a snapshot rev (bookmark/sha).
 	var res struct {
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
 	}
-	pth := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/" + url.PathEscape(branch) + "/contents/" + path
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, pth, nil, nil, &res); err != nil {
+	pth := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/contents/" + path
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, pth, nil, upstream.Q("ref", branch), &res); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
@@ -879,6 +911,9 @@ func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 
 // ---- repo lifecycle adaptations ----
 
+// ensureOrg: the new jjlab has no explicit org endpoint — orgs are created
+// implicitly with their first repository. A bare org is a no-op that still
+// validates the name (the org will materialize on the first repo ensure).
 func (a *API) ensureOrg(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Org string `json:"org"`
@@ -891,12 +926,7 @@ func (a *API) ensureOrg(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
-	var res map[string]interface{}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/ensure-org", b, nil, &res); err != nil {
-		badGateway(w, "jjlab", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, res)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }
 
 // ensureRepo: jj ensure (repo + main) then eagerly create the workspace
@@ -916,8 +946,18 @@ func (a *API) ensureRepo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/ensure", b, nil, nil); err != nil {
+	// New jjlab: POST /repos/{org}/{repo} creates the repo (201) with
+	// default_branch; a 409 already-exists is treated as success (idempotent
+	// ensure). The org materializes implicitly.
+	status, data, err := a.Up.Repo.Raw(r.Context(), http.MethodPost,
+		"/api/v1/repos/"+url.PathEscape(b.Org)+"/"+url.PathEscape(b.Repo),
+		map[string]interface{}{"default_branch": "main"}, nil)
+	if err != nil {
 		badGateway(w, "jjlab", err)
+		return
+	}
+	if status != 201 && status != 200 && status != 409 {
+		writeErr(w, http.StatusBadGateway, fmt.Sprintf("jjlab create repo: HTTP %d: %.200s", status, data))
 		return
 	}
 	var created map[string]interface{}
@@ -945,7 +985,7 @@ func (a *API) cloneRepo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/clone", b, nil, nil); err != nil {
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/"+url.PathEscape(b.Org)+"/"+url.PathEscape(b.Repo)+"/sync/clone", map[string]interface{}{"url": b.GitURL}, nil, nil); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
@@ -989,9 +1029,9 @@ func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := map[string]interface{}{
-		"rev": b.SourceBranch, "branch": b.TargetBranch,
+		"target": b.SourceBranch,
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/"+b.SourceOrg+"/"+b.SourceRepo+"/bookmarks", body, nil, nil); err != nil {
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/"+url.PathEscape(b.SourceOrg)+"/"+url.PathEscape(b.SourceRepo)+"/branches/"+url.PathEscape(b.TargetBranch), body, nil, nil); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
@@ -1010,8 +1050,8 @@ func (a *API) deleteBookmark(w http.ResponseWriter, r *http.Request) {
 	repo := pathParam(r, "repo")
 	bookmark := pathParam(r, "bookmark")
 
-	// 1. Delete the bookmark in .
-	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/" + url.PathEscape(bookmark)
+	// 1. Delete the branch in jjlab (DELETE /repos/{org}/{repo}/branches/{name}).
+	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/branches/" + url.PathEscape(bookmark)
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
 		badGateway(w, "jjlab", err)
 		return
@@ -1042,15 +1082,31 @@ func (a *API) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": 1})
 }
 
-// deleteOrg deletes an org in , then removes every agent session
-// under org:*:*.
+// deleteOrg: the new jjlab has no org-level delete (orgs vanish when their
+// last repo is deleted). Deleting an org therefore deletes every repo under
+// it, then removes the matching agent sessions.
 func (a *API) deleteOrg(w http.ResponseWriter, r *http.Request) {
 	org := pathParam(r, "org")
 
-	path := "/api/v1/repos/" + url.PathEscape(org)
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
-		badGateway(w, "jjlab", err)
-		return
+	// List the org's repos from the new jjlab directory, delete each repo.
+	var tree struct {
+		Orgs []struct {
+			Org   string `json:"org"`
+			Repos []struct {
+				Repo string `json:"repo"`
+			} `json:"repos"`
+		} `json:"orgs"`
+	}
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, "/api/v1/repos", nil, nil, &tree); err == nil {
+		for _, o := range tree.Orgs {
+			if o.Org != org {
+				continue
+			}
+			for _, rp := range o.Repos {
+				path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(rp.Repo)
+				_ = a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil)
+			}
+		}
 	}
 
 	a.deleteSessionsFor(r, org+":")

@@ -10,8 +10,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
+	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/protocol"
 	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/sessionstate"
+	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
 )
 
 type fakeBackends struct {
@@ -50,34 +52,34 @@ func newFakeBackends() *fakeBackends {
 
 	mux = http.NewServeMux()
 	mux.HandleFunc("/api/v1/repos", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"orgs":[{"org":"acme","repos":[{"repo":"api","bookmarks":[{"branch":"main"},{"branch":"dev"}]}]}]}`))
+		_, _ = w.Write([]byte(`{"orgs":[{"org":"acme","repos":[{"repo":"api"}]}]}`))
 	})
-	mux.HandleFunc("/api/v1/repos/ensure", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true}`))
+	mux.HandleFunc("/api/v1/repos/acme/api/branches", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"branches":[{"name":"main","sha":"s1"},{"name":"dev","sha":"s2"}]}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/bookmarks", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true,"branch":"dev"}`))
+	mux.HandleFunc("/api/v1/repos/acme/api/branches/dev2", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"dev2","sha":"s3"}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/main/tree", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/repos/acme/api/tree/main", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"tree":[
-			{"path":"README.md","type":"blob","size":10},
-			{"path":"src","type":"tree","size":0},
-			{"path":"src/main.go","type":"blob","size":100},
-			{"path":"src/util.go","type":"blob","size":50}
+			{"path":"README.md","kind":"file","size":10},
+			{"path":"src","kind":"tree","size":0},
+			{"path":"src/main.go","kind":"file","size":100},
+			{"path":"src/util.go","kind":"file","size":50}
 		]}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/main/contents/hello.txt", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/repos/acme/api/contents/hello.txt", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"content":"aGVsbG8gd29ybGQ=","encoding":"base64","sha":"x","size":11}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/log", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/repos/acme/api/commits", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("rev") != "main" {
 			http.NotFound(w, r)
 			return
 		}
 		_, _ = w.Write([]byte(`{"commits":[
-			{"change_id":"c2","commit_id":"k2","author":"zergx","timestamp":"2026-01-02","message":"edit hello"},
-			{"change_id":"c1","commit_id":"k1","author":"zergx","timestamp":"2026-01-01","message":"write hello"},
-			{"change_id":"c0","commit_id":"k0","author":"zergx","timestamp":"2026-01-01","message":"initial commit"}
+			{"change_id":"c2","sha":"k2","author":"zergx","timestamp":"2026-01-02","description":"edit hello"},
+			{"change_id":"c1","sha":"k1","author":"zergx","timestamp":"2026-01-01","description":"write hello"},
+			{"change_id":"c0","sha":"k0","author":"zergx","timestamp":"2026-01-01","description":"initial commit"}
 		]}`))
 	})
 	fb.repo = httptest.NewServer(mux)
@@ -404,8 +406,8 @@ func TestEscapedSessionIDsForwardDecoded(t *testing.T) {
 
 	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"commits":[
-			{"change_id":"c2","commit_id":"k2","author":"a","timestamp":"t","message":"work"},
-			{"change_id":"c1","commit_id":"k1","author":"a","timestamp":"t","message":"initial commit"}
+			{"change_id":"c2","sha":"k2","author":"a","timestamp":"t","description":"work"},
+			{"change_id":"c1","sha":"k1","author":"a","timestamp":"t","description":"initial commit"}
 		]}`))
 	}))
 	defer repo.Close()
@@ -518,15 +520,14 @@ func TestPackageRoutesAcceptEscapedNames(t *testing.T) {
 // hardcoded "main" (which 404'd every tree/read).
 func TestFsDefaultsToConventionalBranch(t *testing.T) {
 	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/repos" {
-			_, _ = w.Write([]byte(`{"orgs":[{"org":"build","repos":[{"repo":"svc","bookmarks":[{"branch":"master"},{"branch":"dev"}]}]}]}`))
+		if r.URL.Path == "/api/v1/repos/build/svc/branches" {
+			_, _ = w.Write([]byte(`{"branches":[{"name":"master","sha":"s1"},{"name":"dev","sha":"s2"}]}`))
 			return
 		}
 		// Whatever branch the platform asks the tree for, echo it back.
-		if strings.Contains(r.URL.Path, "/tree") {
-			used := strings.Split(r.URL.Path, "/")[6]
-			_, _ = w.Write([]byte(`{"tree":[{"path":"go.mod","type":"blob","size":10}]}`))
-			_ = used
+		if strings.Contains(r.URL.Path, "/tree/") {
+			used := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/build/svc/tree/"), "/")[0]
+			_, _ = w.Write([]byte(`{"tree":[{"path":"go.mod","kind":"file","size":10}]}`))
 			w.Header().Set("X-Used-Branch", used)
 			return
 		}
@@ -545,5 +546,56 @@ func TestFsDefaultsToConventionalBranch(t *testing.T) {
 	dbMu.Unlock()
 	if cached != "master" {
 		t.Fatalf("default branch = %q, want master (main absent, master before dev)", cached)
+	}
+}
+
+func TestListSessionsMergesStateFacts(t *testing.T) {
+	fb := newFakeBackends()
+	defer fb.Close()
+
+	st := sessionstate.NewTestStore(map[string]sessionstate.Fact{
+		protocol.SessionToken("acme:api:main"): {
+			LastMessageAt:      "2026-02-01 10:00:00",
+			LastMessagePreview: "hello world",
+			LastMessageRole:    "assistant",
+		},
+	}, map[string]string{
+		protocol.SessionToken("acme:api:main"): "2026-01-01 00:00:00",
+	})
+
+	h := Router(&API{Up: &upstream.Upstreams{
+		Agent:   upstream.New(fb.agent.URL),
+		Repo:    upstream.New(fb.repo.URL),
+		RepoExt: upstream.New(fb.repoExt.URL),
+		Ops:     upstream.New(fb.ops.URL),
+		Memory:  upstream.New(fb.memory.URL),
+	}, States: st})
+
+	_, v := do(t, h, "GET", "/sessions", "")
+	sessions := v["sessions"].([]interface{})
+	var main map[string]interface{}
+	for _, raw := range sessions {
+		if m := raw.(map[string]interface{}); m["id"] == "acme:api:main" {
+			main = m
+		}
+	}
+	if main == nil {
+		t.Fatal("acme:api:main missing")
+	}
+	if main["last_message_preview"] != "hello world" {
+		t.Fatalf("preview=%v", main["last_message_preview"])
+	}
+	if main["last_message_at"] != "2026-02-01 10:00:00" {
+		t.Fatalf("at=%v", main["last_message_at"])
+	}
+	if main["unread_count"] != float64(1) {
+		t.Fatalf("unread=%v", main["unread_count"])
+	}
+	// The other session has no fact — no extras.
+	for _, raw := range sessions {
+		m := raw.(map[string]interface{})
+		if m["id"] == "" && m["last_message_preview"] != nil {
+			t.Fatalf("unexpected fact on factless session: %v", m)
+		}
 	}
 }

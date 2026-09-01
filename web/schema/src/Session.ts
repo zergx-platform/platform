@@ -7,11 +7,7 @@ export const SessionSchema = z.object({
   branch: z.string(),
   model: z.string(),
   preset: z.string(),
-  parent_id: z.string().nullable(),
   tip_id: z.string().nullable(),
-  fork_at_msg_id: z.string().nullable(),
-  worker_url: z.string().nullable(),
-  container_id: z.string().nullable(),
   max_turns: z.number().nullable(),
   system_prompt: z.string().nullable(),
   base_image: z.string().nullable(),
@@ -21,6 +17,12 @@ export const SessionSchema = z.object({
   total_tokens: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
+  // Chat-list extras merged by the platform aggregate from the bus
+  // (agent message-fact projection + platform read watermark). Absent when
+  // the bus is unavailable or the session has no messages yet.
+  last_message_at: z.string().optional(),
+  last_message_preview: z.string().optional(),
+  unread_count: z.number().optional(),
 })
 export type Session = z.infer<typeof SessionSchema>
 
@@ -31,7 +33,6 @@ export const SessionInfoSchema = z.object({
   unread: z.number().optional(),
   model: z.string(),
   preset: z.string(),
-  parent_id: z.string().nullable(),
 })
 export type SessionInfo = z.infer<typeof SessionInfoSchema>
 

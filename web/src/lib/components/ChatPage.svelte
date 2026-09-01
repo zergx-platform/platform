@@ -1,505 +1,511 @@
 <script lang="ts">
-import { createMessages } from '$lib/hooks/useMessages.svelte'
-import { getStore } from '$lib/stores.svelte'
+import { createMessages } from "$lib/hooks/useMessages.svelte";
+import { getStore } from "$lib/stores.svelte";
 
-const store = getStore()
+const store = getStore();
 
 import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  CircleCheck,
-  CircleDot,
-  Folder,
-  GitBranch,
-  GitCommit,
-  Inbox,
-  Layers,
-  ListTodo,
-  MoreVertical,
-  Send,
-  Settings,
-  Square,
-  SquareTerminal,
-  Terminal,
-  X,
-} from '@lucide/svelte'
-import { onMount } from 'svelte'
+	ArrowLeft,
+	ChevronDown,
+	ChevronRight,
+	Circle,
+	CircleCheck,
+	CircleDot,
+	Folder,
+	GitBranch,
+	GitCommit,
+	Inbox,
+	Layers,
+	ListTodo,
+	MoreVertical,
+	Send,
+	Settings,
+	Square,
+	SquareTerminal,
+	Terminal,
+	X,
+} from "@lucide/svelte";
+import { onMount } from "svelte";
 import type {
-  ContainerInfo,
-  ModelInfo,
-  PresetInfo,
-  Session,
-  Todo,
-} from '$lib/api'
-import * as api from '$lib/api'
-import { Button } from '$lib/components/ui/button'
-import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-import ChatSidebar from './ChatSidebar.svelte'
-import ContainerWorkspace from './ContainerWorkspace.svelte'
-import DiffScreen from './DiffScreen.svelte'
-import FilesPage from './FilesPage.svelte'
-import MailboxPage from './MailboxPage.svelte'
-import MessageBubble from './MessageBubble.svelte'
-import TimelinePage from './TimelinePage.svelte'
+	ContainerInfo,
+	ModelInfo,
+	PresetInfo,
+	Session,
+	Todo,
+} from "$lib/api";
+import * as api from "$lib/api";
+import { Button } from "$lib/components/ui/button";
+import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+import ChatSidebar from "./ChatSidebar.svelte";
+import MessageBubble from "./MessageBubble.svelte";
+import SessionOverlayPanels from "./SessionOverlayPanels.svelte";
 
-let models = $state<ModelInfo[]>([])
-let presets = $state<PresetInfo[]>([])
-let showModelPicker = $state(false)
-let showPresetPicker = $state(false)
-let showImagePicker = $state(false)
-let showSettings = $state(false)
-let input = $state('')
-let scrollEl: HTMLDivElement | undefined
+let models = $state<ModelInfo[]>([]);
+let presets = $state<PresetInfo[]>([]);
+let showModelPicker = $state(false);
+let showPresetPicker = $state(false);
+let showImagePicker = $state(false);
+let showSettings = $state(false);
+let input = $state("");
+let scrollEl: HTMLDivElement | undefined;
 let sessionSettings = $state<{
-  max_turns?: number | null
-  system_prompt?: string | null
-  preset?: string
-  base_image?: string
-}>({})
+	max_turns?: number | null;
+	system_prompt?: string | null;
+	preset?: string;
+	base_image?: string;
+}>({});
 
-let msgHook = $state<ReturnType<typeof createMessages> | null>(null)
+let msgHook = $state<ReturnType<typeof createMessages> | null>(null);
 
-let runStatus = $derived(msgHook?.sending ? 'busy' : 'idle')
-let initialScrollDone = false
+let runStatus = $derived(msgHook?.sending ? "busy" : "idle");
+let initialScrollDone = false;
 
-let diffChangeId = $state<string | null>(null)
-let todos = $state<Todo[]>([])
-let containerRow = $state<ContainerInfo | null>(null)
-let containerLoading = $state(false)
+let diffChangeId = $state<string | null>(null);
+let todos = $state<Todo[]>([]);
+let containerRow = $state<ContainerInfo | null>(null);
+let containerLoading = $state(false);
 
 // Track an anchor message id across a "load earlier" so we can restore the
 // scroll offset after history is prepended (the list grows from the top,
 // which would otherwise visually jump).
-let loadingMore = false
+let loadingMore = false;
 
 async function loadEarlier() {
-  if (!msgHook || !scrollEl || loadingMore) return
-  loadingMore = true
-  // Anchor: the topmost message currently rendered; remember its DOM offset
-  // so we can realign the viewport to the same content after the prepend.
-  const anchorEl = scrollEl.querySelector('[data-msg-id]') as HTMLElement | null
-  const anchorTop = anchorEl ? anchorEl.offsetTop : 0
-  const prevScrollTop = scrollEl.scrollTop
-  await msgHook.loadMore()
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))
-  if (anchorEl) {
-    // New top content pushed anchorEl down by (newHeight - oldHeight);
-    // keep the same visual position by shifting scrollTop accordingly.
-    const delta = anchorEl.offsetTop - anchorTop
-    scrollEl.scrollTop = prevScrollTop + delta
-  }
-  loadingMore = false
+	if (!msgHook || !scrollEl || loadingMore) return;
+	loadingMore = true;
+	// Anchor: the topmost message currently rendered; remember its DOM offset
+	// so we can realign the viewport to the same content after the prepend.
+	const anchorEl = scrollEl.querySelector(
+		"[data-msg-id]",
+	) as HTMLElement | null;
+	const anchorTop = anchorEl ? anchorEl.offsetTop : 0;
+	const prevScrollTop = scrollEl.scrollTop;
+	await msgHook.loadMore();
+	await new Promise((r) =>
+		requestAnimationFrame(() => requestAnimationFrame(() => r(null))),
+	);
+	if (anchorEl) {
+		// New top content pushed anchorEl down by (newHeight - oldHeight);
+		// keep the same visual position by shifting scrollTop accordingly.
+		const delta = anchorEl.offsetTop - anchorTop;
+		scrollEl.scrollTop = prevScrollTop + delta;
+	}
+	loadingMore = false;
 }
 
 function handlePanelScroll() {
-  if (!scrollEl || !msgHook || loadingMore) return
-  // Near the top and there is more history → auto-load older messages.
-  if (scrollEl.scrollTop < 80 && msgHook.hasMore && !msgHook.loading) {
-    void loadEarlier()
-  }
+	if (!scrollEl || !msgHook || loadingMore) return;
+	// Near the top and there is more history → auto-load older messages.
+	if (scrollEl.scrollTop < 80 && msgHook.hasMore && !msgHook.loading) {
+		void loadEarlier();
+	}
 }
 
 onMount(() => {
-  loadModels()
-  loadPresets()
-})
+	loadModels();
+	loadPresets();
+});
 
 // re-init when session changes
 $effect(() => {
-  const sid = store.activeSessionId
-  if (!sid) {
-    msgHook = null
-    return
-  }
-  const hook = createMessages(() => store.activeSessionId ?? sid)
-  // Todos refresh on demand: the memory extension publishes todos-updated
-  // onto the session event stream whenever todowrite lands (no more 5s
-  // polling), plus a refresh when a turn settles for good measure.
-  const offTodos = hook.onSessionEvent((event, params) => {
-    if (event === 'todos-updated' || event === 'turn-complete') {
-      void loadTodos(sid)
-    }
-    if (event === 'tool-result' && typeof params.change_id === 'string') {
-      // A repo write just committed mid-turn: refresh the timeline (and
-      // the file tree) immediately instead of waiting for turn-complete.
-      store.bumpSessionRevision()
-    }
-    if (event === 'status' && params.type === 'busy') {
-      // Turn started = the queued prompt was consumed: mailbox state and
-      // the workspace tree may have moved.
-      store.bumpSessionRevision()
-    }
-    if (event === 'turn-complete') {
-      store.bumpSessionRevision()
-    }
-    void params
-  })
-  hook.init().then(cleanup => {
-    msgHook = hook
-    // store cleanup for later session switch
-    ;(hook as unknown as { _cleanup?: () => void })._cleanup = () => {
-      cleanup()
-      offTodos()
-    }
-  })
-  return () => {
-    const c = (hook as unknown as { _cleanup?: () => void })._cleanup
-    offTodos()
-    if (c) c()
-  }
-})
+	const sid = store.activeSessionId;
+	if (!sid) {
+		msgHook = null;
+		return;
+	}
+	const hook = createMessages(() => store.activeSessionId ?? sid);
+	// Todos refresh on demand: the memory extension publishes todos-updated
+	// onto the session event stream whenever todowrite lands (no more 5s
+	// polling), plus a refresh when a turn settles for good measure.
+	const offTodos = hook.onSessionEvent((event, params) => {
+		if (event === "todos-updated" || event === "turn-complete") {
+			void loadTodos(sid);
+		}
+		if (event === "tool-result" && typeof params.change_id === "string") {
+			// A repo write just committed mid-turn: refresh the timeline (and
+			// the file tree) immediately instead of waiting for turn-complete.
+			store.bumpSessionRevision();
+		}
+		if (event === "status" && params.type === "busy") {
+			// Turn started = the queued prompt was consumed: mailbox state and
+			// the workspace tree may have moved.
+			store.bumpSessionRevision();
+		}
+		if (event === "turn-complete") {
+			store.bumpSessionRevision();
+		}
+		void params;
+	});
+	hook.init().then((cleanup) => {
+		msgHook = hook;
+		// store cleanup for later session switch
+		(hook as unknown as { _cleanup?: () => void })._cleanup = () => {
+			cleanup();
+			offTodos();
+		};
+	});
+	return () => {
+		const c = (hook as unknown as { _cleanup?: () => void })._cleanup;
+		offTodos();
+		if (c) c();
+	};
+});
 
 $effect(() => {
-  const s = store.activeSession
-  if (s) {
-    sessionSettings = {
-      max_turns: s.max_turns,
-      system_prompt: s.system_prompt,
-      preset: s.preset,
-      base_image: s.base_image ?? undefined,
-    }
-  }
-})
+	const s = store.activeSession;
+	if (s) {
+		sessionSettings = {
+			max_turns: s.max_turns,
+			system_prompt: s.system_prompt,
+			preset: s.preset,
+			base_image: s.base_image ?? undefined,
+		};
+	}
+});
 
 $effect(() => {
-  const sid = store.activeSessionId
-  if (sid) {
-    diffChangeId = store.diffChangeId
-  } else {
-    diffChangeId = null
-  }
-  if (!sid) {
-    todos = []
-    containerRow = null
-    return
-  }
-  void loadTodos(sid)
-})
+	const sid = store.activeSessionId;
+	if (sid) {
+		diffChangeId = store.diffChangeId;
+	} else {
+		diffChangeId = null;
+	}
+	if (!sid) {
+		todos = [];
+		containerRow = null;
+		return;
+	}
+	void loadTodos(sid);
+});
 
 $effect(() => {
-  const s = store.activeSession
-  if (s && store.sessionOverlay === 'files') {
-    if (
-      store.codeOrg !== s.org ||
-      store.codeRepo !== s.repo ||
-      store.codeBranch !== s.branch
-    ) {
-      void store.openRepo(s.org, s.repo, s.branch)
-    }
-  }
-})
+	const s = store.activeSession;
+	if (s && store.sessionOverlay === "files") {
+		if (
+			store.codeOrg !== s.org ||
+			store.codeRepo !== s.repo ||
+			store.codeBranch !== s.branch
+		) {
+			void store.openRepo(s.org, s.repo, s.branch);
+		}
+	}
+});
 
 $effect(() => {
-  const sid = store.activeSessionId
-  if (!sid || store.sessionOverlay !== 'container') {
-    containerRow = null
-    return
-  }
-  void loadContainer(sid)
-})
+	const sid = store.activeSessionId;
+	if (!sid || store.sessionOverlay !== "container") {
+		containerRow = null;
+		return;
+	}
+	void loadContainer(sid);
+});
 
 const sessionWorkerId = $derived.by(() => {
-  const s = store.activeSession
-  if (!s) return null
-  return `${s.org}:${s.repo}:${s.branch}`
-})
+	const s = store.activeSession;
+	if (!s) return null;
+	return `${s.org}:${s.repo}:${s.branch}`;
+});
 
 // auto-scroll on new content
 $effect(() => {
-  if (msgHook && msgHook.messages.length > 0) {
-    if (!initialScrollDone && scrollEl) {
-      scrollEl.scrollTop = scrollEl.scrollHeight
-      initialScrollDone = true
-    } else if (scrollEl && msgHook.sending) {
-      // follow streaming tail
-      const nearBottom =
-        scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 120
-      if (nearBottom) scrollEl.scrollTop = scrollEl.scrollHeight
-    }
-  }
-})
+	if (msgHook && msgHook.messages.length > 0) {
+		if (!initialScrollDone && scrollEl) {
+			scrollEl.scrollTop = scrollEl.scrollHeight;
+			initialScrollDone = true;
+		} else if (scrollEl && msgHook.sending) {
+			// follow streaming tail
+			const nearBottom =
+				scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
+				120;
+			if (nearBottom) scrollEl.scrollTop = scrollEl.scrollHeight;
+		}
+	}
+});
 
 const currentModelName = $derived.by(() => {
-  const m = models.find(m => m.id === store.activeSession?.model)
-  return m?.name || store.activeSession?.model || 'Select model'
-})
+	const m = models.find((m) => m.id === store.activeSession?.model);
+	return m?.name || store.activeSession?.model || "Select model";
+});
 
 const currentBaseImageLabel = $derived.by(() => {
-  const img = store.activeSession?.base_image
-  if (!img) return 'debian-trixie-slim'
-  const m = img.match(/(?:zergx)-worker:([^/]+)$/)
-  return m ? m[1] : img
-})
+	const img = store.activeSession?.base_image;
+	if (!img) return "debian-trixie-slim";
+	const m = img.match(/(?:zergx)-worker:([^/]+)$/);
+	return m ? m[1] : img;
+});
 
 const todoDone = $derived(
-  todos.filter(t => t.status === 'completed' || t.status === 'cancelled')
-    .length,
-)
+	todos.filter((t) => t.status === "completed" || t.status === "cancelled")
+		.length,
+);
 
-const totalTokens = $derived(store.activeSession?.total_tokens ?? 0)
+const totalTokens = $derived(store.activeSession?.total_tokens ?? 0);
 
 const tokensLabel = $derived.by(() => {
-  if (totalTokens <= 0) return ''
-  if (totalTokens < 1000) return `${totalTokens}`
-  return `${(totalTokens / 1000).toFixed(1)}k`
-})
+	if (totalTokens <= 0) return "";
+	if (totalTokens < 1000) return `${totalTokens}`;
+	return `${(totalTokens / 1000).toFixed(1)}k`;
+});
 
 // ---- resizable side panel ----
-const PANEL_WIDTH_KEY = 'zergx-panel-width'
-const DEFAULT_PANEL_WIDTH = 480
+const PANEL_WIDTH_KEY = "zergx-panel-width";
+const DEFAULT_PANEL_WIDTH = 480;
 
 function clampPanelWidth(w: number): number {
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
-  return Math.min(Math.max(Math.round(w), 360), Math.min(960, Math.floor(vw * 0.7)))
+	const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+	return Math.min(
+		Math.max(Math.round(w), 360),
+		Math.min(960, Math.floor(vw * 0.7)),
+	);
 }
 
 function loadPanelWidth(): number {
-  const raw = Number(localStorage.getItem(PANEL_WIDTH_KEY))
-  return clampPanelWidth(Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PANEL_WIDTH)
+	const raw = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+	return clampPanelWidth(
+		Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PANEL_WIDTH,
+	);
 }
 
-let panelWidth = $state(loadPanelWidth())
-let panelResizing = $state(false)
+let panelWidth = $state(loadPanelWidth());
+let panelResizing = $state(false);
 
 function startPanelResize(e: PointerEvent): void {
-  e.preventDefault()
-  panelResizing = true
-  document.body.classList.add('select-none')
-  const onMove = (ev: PointerEvent): void => {
-    panelWidth = clampPanelWidth(window.innerWidth - ev.clientX)
-  }
-  const onUp = (): void => {
-    panelResizing = false
-    document.body.classList.remove('select-none')
-    localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth))
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
-  }
-  window.addEventListener('pointermove', onMove)
-  window.addEventListener('pointerup', onUp)
+	e.preventDefault();
+	panelResizing = true;
+	document.body.classList.add("select-none");
+	const onMove = (ev: PointerEvent): void => {
+		panelWidth = clampPanelWidth(window.innerWidth - ev.clientX);
+	};
+	const onUp = (): void => {
+		panelResizing = false;
+		document.body.classList.remove("select-none");
+		localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
+		window.removeEventListener("pointermove", onMove);
+		window.removeEventListener("pointerup", onUp);
+	};
+	window.addEventListener("pointermove", onMove);
+	window.addEventListener("pointerup", onUp);
 }
 
 const overlayTabs = [
-  { id: 'timeline', label: 'Timeline', icon: GitBranch },
-  { id: 'files', label: 'Files', icon: Folder },
-  { id: 'container', label: 'Container', icon: SquareTerminal },
-  { id: 'todos', label: 'Todos', icon: ListTodo },
-  { id: 'mailbox', label: 'Mailbox', icon: Inbox },
-] as const
+	{ id: "timeline", label: "Timeline", icon: GitBranch },
+	{ id: "files", label: "Files", icon: Folder },
+	{ id: "container", label: "Container", icon: SquareTerminal },
+	{ id: "todos", label: "Todos", icon: ListTodo },
+	{ id: "mailbox", label: "Mailbox", icon: Inbox },
+] as const;
 
-function toggleOverlay(id: (typeof overlayTabs)[number]['id']): void {
-  if (store.sessionOverlay === id) store.closeOverlay()
-  else store.openOverlay(id)
+function toggleOverlay(id: (typeof overlayTabs)[number]["id"]): void {
+	if (store.sessionOverlay === id) store.closeOverlay();
+	else store.openOverlay(id);
 }
 
 const overlayTitle = $derived.by(() => {
-  switch (store.sessionOverlay) {
-    case 'timeline':
-      return 'Timeline'
-    case 'files':
-      return store.selectedFilePath
-        ? `Files · ${store.selectedFilePath}`
-        : 'Files'
-    case 'mailbox':
-      return 'Mailbox'
-    case 'container':
-      return 'Container'
-    case 'todos':
-      return 'Todos'
-    default:
-      return ''
-  }
-})
+	switch (store.sessionOverlay) {
+		case "timeline":
+			return "Timeline";
+		case "files":
+			return store.selectedFilePath
+				? `Files · ${store.selectedFilePath}`
+				: "Files";
+		case "mailbox":
+			return "Mailbox";
+		case "container":
+			return "Container";
+		case "todos":
+			return "Todos";
+		default:
+			return "";
+	}
+});
 
 const statusDot = $derived.by(() => {
-  switch (runStatus) {
-    case 'running':
-    case 'busy':
-      return 'bg-yellow-500 animate-pulse'
-    case 'error':
-      return 'bg-red-500'
-    default:
-      return 'bg-green-600'
-  }
-})
+	switch (runStatus) {
+		case "running":
+		case "busy":
+			return "bg-yellow-500 animate-pulse";
+		case "error":
+			return "bg-red-500";
+		default:
+			return "bg-green-600";
+	}
+});
 
 async function loadTodos(sid: string) {
-  const r = await api.sessions.todos(sid)
-  if (store.activeSessionId === sid) todos = r.isOk() ? r.value : []
+	const r = await api.sessions.todos(sid);
+	if (store.activeSessionId === sid) todos = r.isOk() ? r.value : [];
 }
 
 async function loadContainer(sid: string) {
-  containerLoading = true
-  const s = store.activeSession
-  if (!s) {
-    containerLoading = false
-    return
-  }
-  // Session name is org:repo:bookmark; the sandbox pod is keyed by it.
-  const sessionName = `${s.org}:${s.repo}:${s.branch}`
-  const r = await api.containers.list()
-  if (r.isOk()) {
-    const sb = r.value.find(c => c.session === sessionName)
-    containerRow = sb
-      ? {
-          id: sb.session,
-          name: sb.pod_name,
-          image: null,
-          worker_url: sb.worker_url,
-          container_id: sb.container_id,
-          session_id: sb.session,
-          org: s.org,
-          repo: s.repo,
-          branch: s.branch,
-          status: sb.status,
-          created_at: null,
-          kind: 'worker',
-          service_url: null,
-        }
-      : null
-  }
-  containerLoading = false
+	containerLoading = true;
+	const s = store.activeSession;
+	if (!s) {
+		containerLoading = false;
+		return;
+	}
+	// Session name is org:repo:bookmark; the sandbox pod is keyed by it.
+	const sessionName = `${s.org}:${s.repo}:${s.branch}`;
+	const r = await api.containers.list();
+	if (r.isOk()) {
+		const sb = r.value.find((c) => c.session === sessionName);
+		containerRow = sb
+			? {
+					id: sb.session,
+					name: sb.pod_name,
+					image: null,
+					worker_url: sb.worker_url,
+					container_id: sb.container_id,
+					session_id: sb.session,
+					org: s.org,
+					repo: s.repo,
+					branch: s.branch,
+					status: sb.status,
+					created_at: null,
+					kind: "worker",
+					service_url: null,
+				}
+			: null;
+	}
+	containerLoading = false;
 }
 
 async function createBoundContainer() {
-  if (!store.activeSessionId) return
-  const s = store.activeSession
-  if (!s) return
-  containerLoading = true
-  // Sandboxes are created lazily by the first sandbox tool call; a no-op exec
-  // through the platform warms it up on demand.
-  await api.containers.exec(`${s.org}:${s.repo}:${s.branch}`, 'true')
-  await loadContainer(store.activeSessionId)
-  containerLoading = false
+	if (!store.activeSessionId) return;
+	const s = store.activeSession;
+	if (!s) return;
+	containerLoading = true;
+	// Sandboxes are created lazily by the first sandbox tool call; a no-op exec
+	// through the platform warms it up on demand.
+	await api.containers.exec(`${s.org}:${s.repo}:${s.branch}`, "true");
+	await loadContainer(store.activeSessionId);
+	containerLoading = false;
 }
 
 function jumpToFile(path: string) {
-  const s = store.activeSession
-  if (!s) return
-  // Open the file inside the chat right panel (files overlay), never leaving
-  // the chat view.
-  void store.openRepo(s.org, s.repo, s.branch).then(() => {
-    void store.openFileOverlay(path)
-  })
+	const s = store.activeSession;
+	if (!s) return;
+	// Open the file inside the chat right panel (files overlay), never leaving
+	// the chat view.
+	void store.openRepo(s.org, s.repo, s.branch).then(() => {
+		void store.openFileOverlay(path);
+	});
 }
 
 function openChangeDiff(changeId: string) {
-  store.openChange(changeId)
+	store.openChange(changeId);
 }
 
 function handleBack() {
-  if (store.sessionOverlay) {
-    if (store.sessionOverlay === 'files' && store.selectedFilePath) {
-      // step out of the file/diff within the files overlay
-      store.backFileOverlay()
-      return
-    }
-    if (store.sessionOverlay === 'timeline' && store.diffChangeId) {
-      store.openOverlay('timeline')
-      return
-    }
-    store.closeOverlay()
-    return
-  }
-  store.closeSession()
+	if (store.sessionOverlay) {
+		if (store.sessionOverlay === "files" && store.selectedFilePath) {
+			// step out of the file/diff within the files overlay
+			store.backFileOverlay();
+			return;
+		}
+		if (store.sessionOverlay === "timeline" && store.diffChangeId) {
+			store.openOverlay("timeline");
+			return;
+		}
+		store.closeOverlay();
+		return;
+	}
+	store.closeSession();
 }
 
 async function loadModels() {
-  const r = await api.models.list()
-  models = r.isOk() ? r.value : []
+	const r = await api.models.list();
+	models = r.isOk() ? r.value : [];
 }
 
 async function loadPresets() {
-  const r = await api.presets.list()
-  presets = r.isOk() ? r.value : []
+	const r = await api.presets.list();
+	presets = r.isOk() ? r.value : [];
 }
 
 function applySession(updated: Session) {
-  const idx = store.sessions.findIndex(s => s.id === updated.id)
-  if (idx >= 0) store.sessions[idx] = updated
+	const idx = store.sessions.findIndex((s) => s.id === updated.id);
+	if (idx >= 0) store.sessions[idx] = updated;
 }
 
 async function switchModel(modelId: string) {
-  if (!store.activeSessionId) return
-  const r = await api.sessions.settings(store.activeSessionId, {
-    model: modelId,
-  })
-  if (r.isOk()) applySession(r.value)
-  showModelPicker = false
+	if (!store.activeSessionId) return;
+	const r = await api.sessions.settings(store.activeSessionId, {
+		model: modelId,
+	});
+	if (r.isOk()) applySession(r.value);
+	showModelPicker = false;
 }
 
 async function switchPreset(presetId: string) {
-  if (!store.activeSessionId) return
-  const r = await api.sessions.settings(store.activeSessionId, {
-    preset: presetId,
-  })
-  if (r.isOk()) applySession(r.value)
-  showPresetPicker = false
+	if (!store.activeSessionId) return;
+	const r = await api.sessions.settings(store.activeSessionId, {
+		preset: presetId,
+	});
+	if (r.isOk()) applySession(r.value);
+	showPresetPicker = false;
 }
 
 async function switchBaseImage(image: string) {
-  if (!store.activeSessionId) return
-  const r = await api.sessions.settings(store.activeSessionId, {
-    base_image: image,
-  })
-  if (r.isOk()) applySession(r.value)
-  showImagePicker = false
+	if (!store.activeSessionId) return;
+	const r = await api.sessions.settings(store.activeSessionId, {
+		base_image: image,
+	});
+	if (r.isOk()) applySession(r.value);
+	showImagePicker = false;
 }
 
 async function saveSettings() {
-  if (!store.activeSessionId) return
-  const updates: Record<string, unknown> = {}
-  if (sessionSettings.preset !== undefined)
-    updates.preset = sessionSettings.preset
-  if (sessionSettings.max_turns !== undefined)
-    updates.max_turns = sessionSettings.max_turns
-  if (sessionSettings.system_prompt !== undefined)
-    updates.system_prompt = sessionSettings.system_prompt || null
-  if (sessionSettings.base_image !== undefined)
-    updates.base_image = sessionSettings.base_image
-  const r = await api.sessions.settings(store.activeSessionId, updates)
-  if (r.isOk()) applySession(r.value)
-  showSettings = false
+	if (!store.activeSessionId) return;
+	const updates: Record<string, unknown> = {};
+	if (sessionSettings.preset !== undefined)
+		updates.preset = sessionSettings.preset;
+	if (sessionSettings.max_turns !== undefined)
+		updates.max_turns = sessionSettings.max_turns;
+	if (sessionSettings.system_prompt !== undefined)
+		updates.system_prompt = sessionSettings.system_prompt || null;
+	if (sessionSettings.base_image !== undefined)
+		updates.base_image = sessionSettings.base_image;
+	const r = await api.sessions.settings(store.activeSessionId, updates);
+	if (r.isOk()) applySession(r.value);
+	showSettings = false;
 }
 
 async function send() {
-  const text = input.trim()
-  if (!text || !msgHook || msgHook.sending) return
-  input = ''
-  await msgHook.send(text)
-  if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight
+	const text = input.trim();
+	if (!text || !msgHook || msgHook.sending) return;
+	input = "";
+	await msgHook.send(text);
+	if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    send()
-  }
+	if (e.key === "Enter" && !e.shiftKey) {
+		e.preventDefault();
+		send();
+	}
 }
 
 async function undo(messageId: string) {
-  if (!msgHook) return
-  await msgHook.revert(messageId)
+	if (!msgHook) return;
+	await msgHook.revert(messageId);
 }
 
 async function compact() {
-  const sid = store.activeSessionId
-  if (!sid) return
-  const r = await api.sessions.compact(sid)
-  r.match(
-    () => {
-      // Recreate the message hook so it re-fetches history with the new
-      // compaction checkpoint.
-      const hook = createMessages(() => store.activeSessionId ?? sid)
-      hook.init().then(cleanup => {
-        msgHook = hook
-        ;(hook as unknown as { _cleanup?: () => void })._cleanup = cleanup
-      })
-    },
-    () => {},
-  )
+	const sid = store.activeSessionId;
+	if (!sid) return;
+	const r = await api.sessions.compact(sid);
+	r.match(
+		() => {
+			// Recreate the message hook so it re-fetches history with the new
+			// compaction checkpoint.
+			const hook = createMessages(() => store.activeSessionId ?? sid);
+			hook.init().then((cleanup) => {
+				msgHook = hook;
+				(hook as unknown as { _cleanup?: () => void })._cleanup = cleanup;
+			});
+		},
+		() => {},
+	);
 }
 </script>
 
@@ -745,148 +751,40 @@ async function compact() {
                     </Button>
                 </div>
                 <div class="flex-1 min-h-0 relative">
-                    {#if store.sessionOverlay === 'timeline'}
-                        <div class="absolute inset-0">
-                            {#if diffChangeId}
-                                <DiffScreen
-                                    changeId={diffChangeId}
-                                    sessionOrg={store.activeSession?.org}
-                                    sessionRepo={store.activeSession?.repo}
-                                    onclose={() => store.openOverlay('timeline')}
-                                    onselectFile={jumpToFile}
-                                />
-                            {:else}
-                                <TimelinePage onSelectDiff={id => store.openChange(id)} />
-                            {/if}
-                        </div>
-                    {:else if store.sessionOverlay === 'files'}
-                        <div class="absolute inset-0">
-                            <FilesPage />
-                        </div>
-                    {:else if store.sessionOverlay === 'mailbox'}
-                        <div class="absolute inset-0">
-                            <MailboxPage />
-                        </div>
-                    {:else if store.sessionOverlay === 'container'}
-                        <div class="absolute inset-0 flex flex-col">
-                            {#if containerLoading}
-                                <p class="text-xs text-muted-foreground p-3">Loading...</p>
-                            {:else if containerRow}
-                                <ContainerWorkspace
-                                    containerId={containerRow.id}
-                                    containerName={containerRow.name}
-                                    onclose={() => store.closeOverlay()}
-                                />
-                            {:else if sessionWorkerId}
-                                <ContainerWorkspace
-                                    containerId={sessionWorkerId}
-                                    containerName={store.activeSession?.container_id ?? 'session-worker'}
-                                    onclose={() => store.closeOverlay()}
-                                />
-                            {:else}
-                                <div class="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground px-4 text-center">
-                                    <p>No worker container yet — it starts automatically when the agent runs bash or other tools.</p>
-                                    <Button size="sm" variant="outline" onclick={createBoundContainer} disabled={containerLoading}>
-                                        Create container now
-                                    </Button>
-                                </div>
-                            {/if}
-                        </div>
-                    {:else if store.sessionOverlay === 'todos'}
-                        <div class="overflow-y-auto p-3 space-y-1">
-                            {#if todos.length === 0}
-                                <p class="text-xs text-muted-foreground text-center py-6">No todos yet — the agent tracks its plan here via <span class="font-mono">todowrite</span>.</p>
-                            {/if}
-                            {#each todos as t (t.id)}
-                                <div class="flex items-start gap-2 text-xs px-1 py-1.5 rounded hover:bg-accent/40">
-                                    {#if t.status === 'completed'}
-                                        <CircleCheck class="size-3.5 text-green-500 mt-0.5 shrink-0" />
-                                    {:else if t.status === 'in_progress'}
-                                        <CircleDot class="size-3.5 text-yellow-500 mt-0.5 shrink-0" />
-                                    {:else if t.status === 'cancelled'}
-                                        <X class="size-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                                    {:else}
-                                        <Circle class="size-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                                    {/if}
-                                    <span class="flex-1 {t.status === 'completed' || t.status === 'cancelled' ? 'line-through text-muted-foreground' : ''}">{t.content}</span>
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
+                    <SessionOverlayPanels
+                        overlay={store.sessionOverlay}
+                        {diffChangeId}
+                        sessionOrg={store.activeSession?.org}
+                        sessionRepo={store.activeSession?.repo}
+                        {containerRow}
+                        {containerLoading}
+                        {sessionWorkerId}
+                        {todos}
+                        onclose={() => store.closeOverlay()}
+                        onselectFile={jumpToFile}
+                        onselectDiff={id => store.openChange(id)}
+                        oncreateContainer={createBoundContainer}
+                    />
                 </div>
             </div>
 
             <!-- Mobile: full-screen overlay -->
             <div class="absolute inset-0 z-20 bg-background flex flex-col lg:hidden">
                 <div class="flex-1 min-h-0 relative">
-                    {#if store.sessionOverlay === 'timeline'}
-                        <div class="absolute inset-0">
-                            {#if diffChangeId}
-                                <DiffScreen
-                                    changeId={diffChangeId}
-                                    sessionOrg={store.activeSession?.org}
-                                    sessionRepo={store.activeSession?.repo}
-                                    onclose={() => store.openOverlay('timeline')}
-                                    onselectFile={jumpToFile}
-                                />
-                            {:else}
-                                <TimelinePage onSelectDiff={id => store.openChange(id)} />
-                            {/if}
-                        </div>
-                    {:else if store.sessionOverlay === 'files'}
-                        <div class="absolute inset-0">
-                            <FilesPage />
-                        </div>
-                    {:else if store.sessionOverlay === 'mailbox'}
-                        <div class="absolute inset-0">
-                            <MailboxPage />
-                        </div>
-                    {:else if store.sessionOverlay === 'container'}
-                        <div class="absolute inset-0 flex flex-col">
-                            {#if containerLoading}
-                                <p class="text-xs text-muted-foreground p-3">Loading...</p>
-                            {:else if containerRow}
-                                <ContainerWorkspace
-                                    containerId={containerRow.id}
-                                    containerName={containerRow.name}
-                                    onclose={() => store.closeOverlay()}
-                                />
-                            {:else if sessionWorkerId}
-                                <ContainerWorkspace
-                                    containerId={sessionWorkerId}
-                                    containerName={store.activeSession?.container_id ?? 'session-worker'}
-                                    onclose={() => store.closeOverlay()}
-                                />
-                            {:else}
-                                <div class="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground px-4 text-center">
-                                    <p>No worker container yet — it starts automatically when the agent runs bash or other tools.</p>
-                                    <Button size="sm" variant="outline" onclick={createBoundContainer} disabled={containerLoading}>
-                                        Create container now
-                                    </Button>
-                                </div>
-                            {/if}
-                        </div>
-                    {:else if store.sessionOverlay === 'todos'}
-                        <div class="overflow-y-auto p-3 space-y-1">
-                            {#if todos.length === 0}
-                                <p class="text-xs text-muted-foreground text-center py-6">No todos yet — the agent tracks its plan here via <span class="font-mono">todowrite</span>.</p>
-                            {/if}
-                            {#each todos as t (t.id)}
-                                <div class="flex items-start gap-2 text-xs px-1 py-1.5 rounded hover:bg-accent/40">
-                                    {#if t.status === 'completed'}
-                                        <CircleCheck class="size-3.5 text-green-500 mt-0.5 shrink-0" />
-                                    {:else if t.status === 'in_progress'}
-                                        <CircleDot class="size-3.5 text-yellow-500 mt-0.5 shrink-0" />
-                                    {:else if t.status === 'cancelled'}
-                                        <X class="size-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                                    {:else}
-                                        <Circle class="size-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                                    {/if}
-                                    <span class="flex-1 {t.status === 'completed' || t.status === 'cancelled' ? 'line-through text-muted-foreground' : ''}">{t.content}</span>
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
+                    <SessionOverlayPanels
+                        overlay={store.sessionOverlay}
+                        {diffChangeId}
+                        sessionOrg={store.activeSession?.org}
+                        sessionRepo={store.activeSession?.repo}
+                        {containerRow}
+                        {containerLoading}
+                        {sessionWorkerId}
+                        {todos}
+                        onclose={() => store.closeOverlay()}
+                        onselectFile={jumpToFile}
+                        onselectDiff={id => store.openChange(id)}
+                        oncreateContainer={createBoundContainer}
+                    />
                 </div>
             </div>
         {/if}
