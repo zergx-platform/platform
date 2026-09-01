@@ -301,20 +301,22 @@ func recSession(m map[string]interface{}) map[string]interface{} {
 	name, _ := m["name"].(string)
 	org, repo, branch, _ := parseTriple(name)
 	return map[string]interface{}{
-		"id":            name,
-		"org":           org,
-		"repo":          repo,
-		"branch":        branch,
-		"model":         str("model"),
-		"preset":        str("preset"),
-		"tip_id":        m["tip_id"],
-		"max_turns":     num("max_turns"),
-		"system_prompt": str("system_prompt"),
-		"input_tokens":  num("input_tokens"),
-		"output_tokens": num("output_tokens"),
-		"total_tokens":  num("total_tokens"),
-		"created_at":    str("created_at"),
-		"updated_at":    str("updated_at"),
+		"id":                 name,
+		"org":                org,
+		"repo":               repo,
+		"branch":             branch,
+		"model":              str("model"),
+		"preset":             str("preset"),
+		"tip_id":             m["tip_id"],
+		"max_turns":          num("max_turns"),
+		"system_prompt":      str("system_prompt"),
+		"input_tokens":       num("input_tokens"),
+		"output_tokens":      num("output_tokens"),
+		"total_tokens":       num("total_tokens"),
+		"last_input_tokens":  num("last_input_tokens"),
+		"last_output_tokens": num("last_output_tokens"),
+		"created_at":         str("created_at"),
+		"updated_at":         str("updated_at"),
 	}
 }
 

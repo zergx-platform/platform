@@ -15,6 +15,8 @@ export const SessionSchema = z.object({
   input_tokens: z.number().nullable(),
   output_tokens: z.number().nullable(),
   total_tokens: z.number().nullable(),
+  last_input_tokens: z.number().optional(),
+  last_output_tokens: z.number().optional(),
   created_at: z.string(),
   updated_at: z.string(),
   // Chat-list extras merged by the platform aggregate from the bus

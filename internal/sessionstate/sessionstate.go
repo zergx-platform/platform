@@ -41,8 +41,11 @@ const (
 	// vars.<ExtID>.<sessionToken>.<name>.
 	ExtID = "platform"
 
-	// StateBucket carries agent-published message facts.
-	StateBucket = "abc-session-state"
+	// StateBucket carries agent-published message facts. DELIBERATELY not
+	// the SDK lease bucket (abc-session-state in agent/lease.ts), which the
+	// session runner uses for mutual exclusion with a 30s TTL — sharing it
+	// would let a fact overwrite the run lease and stall turns.
+	StateBucket = "abc-session-meta"
 
 	// readVar is the read-watermark variable name (session scope).
 	readVar = "last_read_at"
