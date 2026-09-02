@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/protocol"
+	"github.com/abcp-sdk/abc-protocol-go/protocol"
 	"github.com/zergx-platform/zergx/internal/naming"
 	"github.com/zergx-platform/zergx/internal/sessionstate"
 	"github.com/zergx-platform/zergx/internal/upstream"

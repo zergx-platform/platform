@@ -3,12 +3,11 @@ module github.com/zergx-platform/zergx
 go 1.26
 
 require (
-	forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go v1.0.1
+	github.com/abcp-sdk/abc-protocol-go v1.0.2
 	github.com/go-chi/chi/v5 v5.3.2
 )
 
 require (
-	github.com/abcp-sdk/abc-protocol-go v1.0.2 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/nats-io/nats.go v1.53.1 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect

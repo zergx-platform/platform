@@ -30,9 +30,9 @@ import (
 	"sync"
 	"time"
 
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/bus"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
-	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/protocol"
+	"github.com/abcp-sdk/abc-protocol-go/bus"
+	"github.com/abcp-sdk/abc-protocol-go/extension"
+	"github.com/abcp-sdk/abc-protocol-go/protocol"
 	"github.com/zergx-platform/zergx/internal/upstream"
 )
 
