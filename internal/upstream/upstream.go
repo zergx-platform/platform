@@ -137,8 +137,8 @@ type Upstreams struct {
 	RepoExt  *Client // repo-extension (session-map, workspace ops surface)
 	Ops      *Client // ops-extension (containers, sandbox, build, infra)
 	Artifact *Client // artifact (packages, OCI /v2)
-	Memory   *Client // memory-tools (todos)
-	Files    *Client // memory-extension file storage (/api/v1/files)
+	Memory   *Client // memory-tools (todos + file tools that read the agent files API)
+	Files    *Client // agent file storage (/api/v1/files)
 }
 
 func FromEnv(env func(string) string) *Upstreams {
@@ -161,6 +161,6 @@ func FromEnv(env func(string) string) *Upstreams {
 		Ops:      New(or("OPS_URL", "ZERGX_EXECUTOR_URL", "http://ops-extension.zergx.svc.cluster.local:80")),
 		Artifact: New(or("ARTIFACT_URL", "ZERGX_REGISTRY_URL", "http://jj-lab.temp.svc.cluster.local")),
 		Memory:   New(or("MEMORY_URL", "ZERGX_MEMORY_URL", "http://memory-tools.zergx.svc.cluster.local:80")),
-		Files:    New(or("MEMORY_URL", "ZERGX_MEMORY_URL", "http://memory-tools.zergx.svc.cluster.local:80")),
+		Files:    New(or("AGENT_URL", "ZERGX_AGENT_URL", "http://agent.zergx.svc.cluster.local:80")),
 	}
 }
