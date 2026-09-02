@@ -913,9 +913,9 @@ func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 
 // ---- repo lifecycle adaptations ----
 
-// ensureOrg: the new jjlab has no explicit org endpoint — orgs are created
-// implicitly with their first repository. A bare org is a no-op that still
-// validates the name (the org will materialize on the first repo ensure).
+// ensureOrg: forward to jjlab, which materializes the (possibly empty) org —
+// it creates the org directory + DB row, and jjlab's `GET /repos` lists
+// empty orgs too, so the frontend "All repositories" tree shows them.
 func (a *API) ensureOrg(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Org string `json:"org"`
@@ -928,7 +928,13 @@ func (a *API) ensureOrg(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+	var res map[string]interface{}
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost,
+		"/api/v1/repos/ensure-org", map[string]interface{}{"org": b.Org}, nil, &res); err != nil {
+		badGateway(w, "jjlab", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "org": b.Org})
 }
 
 // ensureRepo: jj ensure (repo + main) then eagerly create the workspace
