@@ -18,6 +18,7 @@ import {
 	Layers,
 	ListTodo,
 	MoreVertical,
+	Paperclip,
 	Send,
 	Settings,
 	Square,
@@ -47,6 +48,10 @@ let showPresetPicker = $state(false);
 let showImagePicker = $state(false);
 let showSettings = $state(false);
 let input = $state("");
+let pendingFiles = $state<{ code: string; name: string; size: number }[]>([]);
+let uploading = $state(false);
+let fileInput: HTMLInputElement | undefined;
+let attachError = $state("");
 let scrollEl: HTMLDivElement | undefined;
 let sessionSettings = $state<{
 	max_turns?: number | null;
@@ -472,10 +477,33 @@ async function saveSettings() {
 
 async function send() {
 	const text = input.trim();
-	if (!text || !msgHook || msgHook.sending) return;
+	const atts = pendingFiles.map(f => f.code);
+	if ((!text && atts.length === 0) || !msgHook || msgHook.sending) return;
 	input = "";
-	await msgHook.send(text);
-	if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+	pendingFiles = [];
+	await msgHook.send(text, atts);
+}
+
+async function pickFiles() {
+	fileInput?.click();
+}
+
+async function onFiles(e: Event) {
+	const target = e.target as HTMLInputElement;
+	const files = Array.from(target.files ?? []);
+	target.value = "";
+	if (files.length === 0) return;
+	uploading = true;
+	attachError = "";
+	for (const f of files) {
+		const r = await api.files.uploadFile(f);
+		if (r.isOk()) {
+			pendingFiles = [...pendingFiles, { code: r.value.code, name: r.value.name, size: r.value.size }];
+		} else {
+			attachError = r.error;
+		}
+	}
+	uploading = false;
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -638,7 +666,36 @@ async function compact() {
                 {/if}
             </div>
             <div class="border-t border-border shrink-0" style="padding-bottom: env(safe-area-inset-bottom);">
+                    {#if pendingFiles.length > 0}
+                        <div class="flex flex-wrap gap-1 items-center px-3 pb-1">
+                            {#each pendingFiles as f (f.code)}
+                                <span class="inline-flex items-center gap-1 text-xs rounded border border-border bg-muted/40 px-2 py-0.5">
+                                    <span class="truncate max-w-[140px]">{f.name}</span>
+                                    <button class="text-muted-foreground hover:text-foreground" aria-label="Remove attachment" onclick={() => (pendingFiles = pendingFiles.filter(x => x.code !== f.code))}>×</button>
+                                </span>
+                            {/each}
+                        </div>
+                    {/if}
+                    {#if uploading}
+                        <div class="px-3 pb-1 text-xs text-muted-foreground">Uploading…</div>
+                    {/if}
+                    {#if attachError}
+                        <div class="px-3 pb-1 text-xs text-destructive">{attachError}</div>
+                    {/if}
                 <div class="flex gap-2 p-3 pb-1">
+                    <div class="flex items-end gap-2">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            class="size-10 shrink-0"
+                            disabled={msgHook?.sending || uploading}
+                            title="Attach file"
+                            onclick={pickFiles}
+                        >
+                            <Paperclip class="size-4" />
+                        </Button>
+                        <input bind:this={fileInput} type="file" multiple class="hidden" onchange={onFiles} />
+                    </div>
                     <textarea
                         class="flex-1 min-h-[48px] max-h-[50vh] text-sm placeholder:text-muted-foreground dark:bg-input/30 border-input flex rounded-md border bg-transparent px-3 py-2 outline-none transition-[color,box-shadow] disabled:opacity-50"
                         rows={2} placeholder="Type a message..."
@@ -651,7 +708,7 @@ async function compact() {
                             <Square class="size-4" />
                         </Button>
                     {:else}
-                        <Button onclick={send} disabled={!input.trim()} size="icon" variant="outline" class="size-10 shrink-0 border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary/60" title="Send">
+                        <Button onclick={send} disabled={!input.trim() && pendingFiles.length === 0} size="icon" variant="outline" class="size-10 shrink-0 border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary/60" title="Send">
                             <Send class="size-4" />
                         </Button>
                     {/if}

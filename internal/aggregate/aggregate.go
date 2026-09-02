@@ -635,11 +635,30 @@ func (a *API) sessionRead(w http.ResponseWriter, r *http.Request) {
 func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
 	var b struct {
-		Prompt string `json:"prompt"`
+		Prompt      string `json:"prompt"`
+		Attachments []struct {
+			Code string `json:"code"`
+		} `json:"attachments"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Prompt == "" {
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if b.Prompt == "" && len(b.Attachments) == 0 {
 		writeErr(w, http.StatusBadRequest, "prompt required")
 		return
+	}
+	// Platform-owned: expand each attachment code into a `[附件 …file:code…]`
+	// reference by fetching metadata from the agent file store, then splice
+	// the references ahead of the user's text. The agent is unchanged — it
+	// only ever receives the final {prompt} string.
+	refs, err := a.formatFileRefs(r.Context(), b.Attachments)
+	if err != nil {
+		badGateway(w, "files", err)
+		return
+	}
+	if len(refs) > 0 {
+		b.Prompt = strings.Join(refs, "\n") + "\n" + b.Prompt
 	}
 	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, sessPath(id, "/prompt"), b, nil, nil); err != nil {
 		badGateway(w, "agent", err)
@@ -665,6 +684,45 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "messageId": messageId})
+}
+
+// formatFileRefs turns attachment codes into `[附件 <name> | file:<code> |
+// <mime> | <sizeB>]` references by querying the agent file store per code.
+// A missing/errored lookup degrades to a bare `file:<code>` so a bad code
+// never blocks the prompt. Returns the ordered reference lines.
+func (a *API) formatFileRefs(ctx context.Context, atts []struct {
+	Code string `json:"code"`
+}) ([]string, error) {
+	out := make([]string, 0, len(atts))
+	for _, att := range atts {
+		if att.Code == "" {
+			continue
+		}
+		var m struct {
+			Meta struct {
+				Name string `json:"name"`
+				Mime string `json:"mime"`
+				Size int64  `json:"size"`
+			} `json:"meta"`
+		}
+		// The agent exposes meta as {meta:{name,mime,size}} (route
+		// /files/{code}/meta). Lookup failure degrades gracefully.
+		_ = a.Up.Files.JSON(ctx, http.MethodGet, "/api/v1/files/"+url.PathEscape(att.Code)+"/meta", nil, nil, &m)
+		if m.Meta.Name == "" && m.Meta.Mime == "" {
+			out = append(out, "[file:"+att.Code+"]")
+			continue
+		}
+		mime := m.Meta.Mime
+		if mime == "" {
+			mime = "application/octet-stream"
+		}
+		name := m.Meta.Name
+		if name == "" {
+			name = att.Code
+		}
+		out = append(out, fmt.Sprintf("[附件 %s | file:%s | %s | %d B]", name, att.Code, mime, m.Meta.Size))
+	}
+	return out, nil
 }
 
 // listMessages adapts agent message rows into the UI Message shape with

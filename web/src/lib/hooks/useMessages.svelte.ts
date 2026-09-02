@@ -1,550 +1,564 @@
-import * as api from '$lib/api'
-import { uid } from '$lib/utils'
+import * as api from "$lib/api";
+import { uid } from "$lib/utils";
 import {
-  type ChatMessage,
-  compareMessages,
-  mapMessagesToChat,
-  type StreamEvent,
-} from './message-utils'
+	type ChatMessage,
+	compareMessages,
+	mapMessagesToChat,
+	type StreamEvent,
+} from "./message-utils";
 
-export type { ChatMessage, ChatPart, MsgStatus } from './message-utils'
+export type { ChatMessage, ChatPart, MsgStatus } from "./message-utils";
 
 export function createMessages(sessionId: () => string) {
-  let messages = $state<ChatMessage[]>([])
-  let sending = $state(false)
-  let loading = $state(false)
-  let hasMore = $state(false)
+	let messages = $state<ChatMessage[]>([]);
+	let sending = $state(false);
+	let loading = $state(false);
+	let hasMore = $state(false);
 
-  let mountId = 0
-  let eventSource: EventSource | null = null
-  // Side-channel listeners for session events the chat itself does not
-  // render (todos-updated, …) — lets pages drop their own polling loops.
-  const sessionEventListeners = new Set<(event: string, params: Record<string, unknown>) => void>()
-  let streamingId = $state<string | null>(null)
-  let nextSeq = 1000000
+	let mountId = 0;
+	let eventSource: EventSource | null = null;
+	// Side-channel listeners for session events the chat itself does not
+	// render (todos-updated, …) — lets pages drop their own polling loops.
+	const sessionEventListeners = new Set<
+		(event: string, params: Record<string, unknown>) => void
+	>();
+	let streamingId = $state<string | null>(null);
+	let nextSeq = 1000000;
 
-  function allocSeq(): number {
-    return nextSeq++
-  }
+	function allocSeq(): number {
+		return nextSeq++;
+	}
 
-  function bumpSeqAfter(history: ChatMessage[]): void {
-    const maxSeq = history.reduce(
-      (max, m) => (typeof m.seq === 'number' && m.seq < nextSeq ? m.seq : max),
-      -1,
-    )
-    if (maxSeq >= 0) nextSeq = Math.max(nextSeq, maxSeq + 1)
-  }
+	function bumpSeqAfter(history: ChatMessage[]): void {
+		const maxSeq = history.reduce(
+			(max, m) => (typeof m.seq === "number" && m.seq < nextSeq ? m.seq : max),
+			-1,
+		);
+		if (maxSeq >= 0) nextSeq = Math.max(nextSeq, maxSeq + 1);
+	}
 
-  // delta batching (rAF flush) for performance
-  let deltaBatch: Record<string, string> = {}
-  let deltaRafId: number | undefined
+	// delta batching (rAF flush) for performance
+	let deltaBatch: Record<string, string> = {};
+	let deltaRafId: number | undefined;
 
-  const sortedMsgs = $derived(
-    [...messages].sort((a, b) => compareMessages(a, b)),
-  )
+	const sortedMsgs = $derived(
+		[...messages].sort((a, b) => compareMessages(a, b)),
+	);
 
-  function flushDeltaBatch() {
-    deltaRafId = undefined
-    const batch = deltaBatch
-    deltaBatch = {}
-    if (!streamingId || Object.keys(batch).length === 0) return
-    const idx = messages.findIndex(m => m.id === streamingId)
-    if (idx < 0) return
-    const msg = messages[idx]
-    const parts = [...msg.parts]
-    for (const partId of Object.keys(batch)) {
-      const delta = batch[partId]
-      const pidx = parts.findIndex(p => p.id === partId)
-      if (pidx >= 0) {
-        const existing = parts[pidx]
-        parts[pidx] = {
-          ...existing,
-          text: (existing.text ?? '') + delta,
-        }
-      } else {
-        const isReasoning = partId.startsWith('r')
-        parts.push({
-          id: partId,
-          type: isReasoning ? 'reasoning' : 'text',
-          text: delta,
-        })
-      }
-    }
-    const next = [...messages]
-    next[idx] = { ...msg, parts }
-    messages = next
-  }
+	function flushDeltaBatch() {
+		deltaRafId = undefined;
+		const batch = deltaBatch;
+		deltaBatch = {};
+		if (!streamingId || Object.keys(batch).length === 0) return;
+		const idx = messages.findIndex((m) => m.id === streamingId);
+		if (idx < 0) return;
+		const msg = messages[idx];
+		const parts = [...msg.parts];
+		for (const partId of Object.keys(batch)) {
+			const delta = batch[partId];
+			const pidx = parts.findIndex((p) => p.id === partId);
+			if (pidx >= 0) {
+				const existing = parts[pidx];
+				parts[pidx] = {
+					...existing,
+					text: (existing.text ?? "") + delta,
+				};
+			} else {
+				const isReasoning = partId.startsWith("r");
+				parts.push({
+					id: partId,
+					type: isReasoning ? "reasoning" : "text",
+					text: delta,
+				});
+			}
+		}
+		const next = [...messages];
+		next[idx] = { ...msg, parts };
+		messages = next;
+	}
 
-  function scheduleDeltaFlush() {
-    if (deltaRafId != null) return
-    deltaRafId = requestAnimationFrame(flushDeltaBatch)
-  }
+	function scheduleDeltaFlush() {
+		if (deltaRafId != null) return;
+		deltaRafId = requestAnimationFrame(flushDeltaBatch);
+	}
 
-  function ensureStreamingMsg(forceNew = false): string {
-    if (!forceNew && streamingId) {
-      const exists = messages.find(m => m.id === streamingId)
-      if (exists) return streamingId
-    }
-    const id = uid()
-    streamingId = id
-    messages = [
-      ...messages,
-      {
-        id,
-        role: 'assistant',
-        status: 'streaming',
-        parts: [],
-        createdAt: new Date().toISOString(),
-        seq: allocSeq(),
-      },
-    ]
-    return id
-  }
+	function ensureStreamingMsg(forceNew = false): string {
+		if (!forceNew && streamingId) {
+			const exists = messages.find((m) => m.id === streamingId);
+			if (exists) return streamingId;
+		}
+		const id = uid();
+		streamingId = id;
+		messages = [
+			...messages,
+			{
+				id,
+				role: "assistant",
+				status: "streaming",
+				parts: [],
+				createdAt: new Date().toISOString(),
+				seq: allocSeq(),
+			},
+		];
+		return id;
+	}
 
-  function ensurePart(msgId: string, partId: string, type: string): void {
-    const idx = messages.findIndex(m => m.id === msgId)
-    if (idx < 0) return
-    const msg = messages[idx]
-    if (msg.parts.some(p => p.id === partId)) return
-    const next = [...messages]
-    next[idx] = {
-      ...msg,
-      parts: [...msg.parts, { id: partId, type, text: '' }],
-    }
-    messages = next
-  }
+	function ensurePart(msgId: string, partId: string, type: string): void {
+		const idx = messages.findIndex((m) => m.id === msgId);
+		if (idx < 0) return;
+		const msg = messages[idx];
+		if (msg.parts.some((p) => p.id === partId)) return;
+		const next = [...messages];
+		next[idx] = {
+			...msg,
+			parts: [...msg.parts, { id: partId, type, text: "" }],
+		};
+		messages = next;
+	}
 
-  function addToolPart(
-    msgId: string,
-    partId: string,
-    name: string,
-    input: unknown,
-  ): void {
-    const idx = messages.findIndex(m => m.id === msgId)
-    if (idx < 0) return
-    const msg = messages[idx]
-    if (msg.parts.some(p => p.id === partId)) {
-      // update existing
-      const parts = msg.parts.map(p =>
-        p.id === partId
-          ? {
-              ...p,
-              type: 'tool' as const,
-              tool: name,
-              state: {
-                status: 'running' as const,
-                title: name,
-                input: input as Record<string, unknown>,
-              },
-            }
-          : p,
-      )
-      const next = [...messages]
-      next[idx] = { ...msg, parts }
-      messages = next
-      return
-    }
-    const next = [...messages]
-    next[idx] = {
-      ...msg,
-      parts: [
-        ...msg.parts,
-        {
-          id: partId,
-          type: 'tool',
-          tool: name,
-          state: {
-            status: 'running',
-            title: name,
-            input: input as Record<string, unknown>,
-          },
-        },
-      ],
-    }
-    messages = next
-  }
+	function addToolPart(
+		msgId: string,
+		partId: string,
+		name: string,
+		input: unknown,
+	): void {
+		const idx = messages.findIndex((m) => m.id === msgId);
+		if (idx < 0) return;
+		const msg = messages[idx];
+		if (msg.parts.some((p) => p.id === partId)) {
+			// update existing
+			const parts = msg.parts.map((p) =>
+				p.id === partId
+					? {
+							...p,
+							type: "tool" as const,
+							tool: name,
+							state: {
+								status: "running" as const,
+								title: name,
+								input: input as Record<string, unknown>,
+							},
+						}
+					: p,
+			);
+			const next = [...messages];
+			next[idx] = { ...msg, parts };
+			messages = next;
+			return;
+		}
+		const next = [...messages];
+		next[idx] = {
+			...msg,
+			parts: [
+				...msg.parts,
+				{
+					id: partId,
+					type: "tool",
+					tool: name,
+					state: {
+						status: "running",
+						title: name,
+						input: input as Record<string, unknown>,
+					},
+				},
+			],
+		};
+		messages = next;
+	}
 
-  function updateToolResult(
-    partId: string,
-    result: unknown,
-    errorMsg?: string,
-    changeId?: string,
-    diff?: string,
-    additions?: number,
-    deletions?: number,
-  ): void {
-    if (!streamingId) return
-    const idx = messages.findIndex(m => m.id === streamingId)
-    if (idx < 0) return
-    const msg = messages[idx]
-    const parts = msg.parts.map(p => {
-      if (p.id !== partId) return p
-      return {
-        ...p,
-        type: 'tool' as const,
-        state: {
-          ...(p.state ?? {}),
-          status: errorMsg ? ('error' as const) : ('complete' as const),
-          output:
-            typeof result === 'string'
-              ? result
-              : JSON.stringify(result, null, 2),
-          error: errorMsg,
-          change_id: changeId ?? p.state?.change_id,
-          diff: diff ?? p.state?.diff,
-          additions: additions ?? p.state?.additions,
-          deletions: deletions ?? p.state?.deletions,
-        },
-      }
-    })
-    const next = [...messages]
-    next[idx] = { ...msg, parts }
-    messages = next
-  }
+	function updateToolResult(
+		partId: string,
+		result: unknown,
+		errorMsg?: string,
+		changeId?: string,
+		diff?: string,
+		additions?: number,
+		deletions?: number,
+	): void {
+		if (!streamingId) return;
+		const idx = messages.findIndex((m) => m.id === streamingId);
+		if (idx < 0) return;
+		const msg = messages[idx];
+		const parts = msg.parts.map((p) => {
+			if (p.id !== partId) return p;
+			return {
+				...p,
+				type: "tool" as const,
+				state: {
+					...(p.state ?? {}),
+					status: errorMsg ? ("error" as const) : ("complete" as const),
+					output:
+						typeof result === "string"
+							? result
+							: JSON.stringify(result, null, 2),
+					error: errorMsg,
+					change_id: changeId ?? p.state?.change_id,
+					diff: diff ?? p.state?.diff,
+					additions: additions ?? p.state?.additions,
+					deletions: deletions ?? p.state?.deletions,
+				},
+			};
+		});
+		const next = [...messages];
+		next[idx] = { ...msg, parts };
+		messages = next;
+	}
 
-  function finishStreaming(): void {
-    if (deltaRafId != null) {
-      cancelAnimationFrame(deltaRafId)
-      flushDeltaBatch()
-    }
-    if (!streamingId) {
-      sending = false
-      return
-    }
-    const idx = messages.findIndex(m => m.id === streamingId)
-    if (idx >= 0) {
-      const next = [...messages]
-      next[idx] = { ...messages[idx], status: 'complete' }
-      messages = next
-    }
-    streamingId = null
-    sending = false
-  }
+	function finishStreaming(): void {
+		if (deltaRafId != null) {
+			cancelAnimationFrame(deltaRafId);
+			flushDeltaBatch();
+		}
+		if (!streamingId) {
+			sending = false;
+			return;
+		}
+		const idx = messages.findIndex((m) => m.id === streamingId);
+		if (idx >= 0) {
+			const next = [...messages];
+			next[idx] = { ...messages[idx], status: "complete" };
+			messages = next;
+		}
+		streamingId = null;
+		sending = false;
+	}
 
-  function addErrorMessage(text: string): void {
-    messages = [
-      ...messages.filter(m => m.status !== 'streaming'),
-      {
-        id: uid(),
-        role: 'error',
-        status: 'error',
-        parts: [{ id: uid(), type: 'text', text }],
-        createdAt: new Date().toISOString(),
-        seq: allocSeq(),
-      },
-    ]
-    streamingId = null
-  }
+	function addErrorMessage(text: string): void {
+		messages = [
+			...messages.filter((m) => m.status !== "streaming"),
+			{
+				id: uid(),
+				role: "error",
+				status: "error",
+				parts: [{ id: uid(), type: "text", text }],
+				createdAt: new Date().toISOString(),
+				seq: allocSeq(),
+			},
+		];
+		streamingId = null;
+	}
 
-  function handleEvent(ev: StreamEvent): void {
-    const { event, params } = ev
-    // Side-channel listeners see EVERY event (todos-updated, tool-result
-    // with change_id, status, …) so panels can react mid-turn.
-    for (const cb of sessionEventListeners) {
-      try {
-        cb(ev.event, (ev.params ?? {}) as Record<string, unknown>)
-      } catch {
-        // listener errors must not break the stream pump
-      }
-    }
-    switch (event) {
-      case 'step-start':
-      case 'text-start':
-      case 'reasoning-start':
-      case 'tool-input-start': {
-        const current = streamingId
-          ? messages.find(m => m.id === streamingId)
-          : undefined
-        const hasToolPart = current?.parts.some(p => p.type === 'tool') ?? false
-        const sid = ensureStreamingMsg(
-          event === 'step-start' || (event === 'text-start' && hasToolPart),
-        )
-        if (event === 'text-start' && params.id)
-          ensurePart(sid, params.id, 'text')
-        else if (event === 'reasoning-start' && params.id)
-          ensurePart(sid, `r${params.id}`, 'reasoning')
-        break
-      }
-      case 'text-delta': {
-        if (params.id && params.text) {
-          ensureStreamingMsg()
-          deltaBatch[params.id] = (deltaBatch[params.id] ?? '') + params.text
-          scheduleDeltaFlush()
-        }
-        break
-      }
-      case 'reasoning-delta': {
-        if (params.id && params.text) {
-          ensureStreamingMsg()
-          const pid = `r${params.id}`
-          deltaBatch[pid] = (deltaBatch[pid] ?? '') + params.text
-          scheduleDeltaFlush()
-        }
-        break
-      }
-      case 'tool-call': {
-        const sid = ensureStreamingMsg()
-        const tcId = (params.toolCallId as string) ?? params.id
-        if (tcId)
-          addToolPart(
-            sid,
-            tcId,
-            (params.toolName as string) ?? params.name ?? 'tool',
-            params.input,
-          )
-        break
-      }
-      case 'tool-result': {
-        const tcId = (params.toolCallId as string) ?? params.id
-        if (!tcId) break
-        updateToolResult(
-          tcId,
-          (params.formatted as unknown) ??
-            (params.output as unknown) ??
-            params.result,
-          undefined,
-          typeof params.change_id === 'string' ? params.change_id : undefined,
-          typeof params.diff === 'string' ? params.diff : undefined,
-          typeof params.additions === 'number' ? params.additions : undefined,
-          typeof params.deletions === 'number' ? params.deletions : undefined,
-        )
-        break
-      }
-      case 'tool-error': {
-        const tcId = (params.toolCallId as string) ?? params.id
-        const errObj = params.error as { message?: string } | string | undefined
-        const errMsg =
-          typeof errObj === 'string'
-            ? errObj
-            : (errObj?.message ?? params.message ?? 'tool error')
-        if (tcId) updateToolResult(tcId, undefined, errMsg)
-        break
-      }
-      case 'turn-complete': {
-        finishStreaming()
-        break
-      }
-      case 'status': {
-        const stype = params.type
-        if (stype === 'busy' || stype === 'running') {
-          sending = true
-        } else {
-          finishStreaming()
-        }
-        break
-      }
-      case 'error':
-      case 'provider-error': {
-        const errObj = params.error as { message?: string } | string | undefined
-        const msg =
-          typeof errObj === 'string'
-            ? errObj
-            : (errObj?.message ?? params.message ?? 'Unknown error')
-        addErrorMessage(msg)
-        sending = false
-        break
-      }
-      case 'finish':
-      case 'step-finish':
-      case 'text-end':
-      case 'reasoning-end':
-      case 'tool-input-end':
-        // no-op boundaries
-        break
-      default:
-        break
-    }
-  }
+	function handleEvent(ev: StreamEvent): void {
+		const { event, params } = ev;
+		// Side-channel listeners see EVERY event (todos-updated, tool-result
+		// with change_id, status, …) so panels can react mid-turn.
+		for (const cb of sessionEventListeners) {
+			try {
+				cb(ev.event, (ev.params ?? {}) as Record<string, unknown>);
+			} catch {
+				// listener errors must not break the stream pump
+			}
+		}
+		switch (event) {
+			case "step-start":
+			case "text-start":
+			case "reasoning-start":
+			case "tool-input-start": {
+				const current = streamingId
+					? messages.find((m) => m.id === streamingId)
+					: undefined;
+				const hasToolPart =
+					current?.parts.some((p) => p.type === "tool") ?? false;
+				const sid = ensureStreamingMsg(
+					event === "step-start" || (event === "text-start" && hasToolPart),
+				);
+				if (event === "text-start" && params.id)
+					ensurePart(sid, params.id, "text");
+				else if (event === "reasoning-start" && params.id)
+					ensurePart(sid, `r${params.id}`, "reasoning");
+				break;
+			}
+			case "text-delta": {
+				if (params.id && params.text) {
+					ensureStreamingMsg();
+					deltaBatch[params.id] = (deltaBatch[params.id] ?? "") + params.text;
+					scheduleDeltaFlush();
+				}
+				break;
+			}
+			case "reasoning-delta": {
+				if (params.id && params.text) {
+					ensureStreamingMsg();
+					const pid = `r${params.id}`;
+					deltaBatch[pid] = (deltaBatch[pid] ?? "") + params.text;
+					scheduleDeltaFlush();
+				}
+				break;
+			}
+			case "tool-call": {
+				const sid = ensureStreamingMsg();
+				const tcId = (params.toolCallId as string) ?? params.id;
+				if (tcId)
+					addToolPart(
+						sid,
+						tcId,
+						(params.toolName as string) ?? params.name ?? "tool",
+						params.input,
+					);
+				break;
+			}
+			case "tool-result": {
+				const tcId = (params.toolCallId as string) ?? params.id;
+				if (!tcId) break;
+				updateToolResult(
+					tcId,
+					(params.formatted as unknown) ??
+						(params.output as unknown) ??
+						params.result,
+					undefined,
+					typeof params.change_id === "string" ? params.change_id : undefined,
+					typeof params.diff === "string" ? params.diff : undefined,
+					typeof params.additions === "number" ? params.additions : undefined,
+					typeof params.deletions === "number" ? params.deletions : undefined,
+				);
+				break;
+			}
+			case "tool-error": {
+				const tcId = (params.toolCallId as string) ?? params.id;
+				const errObj = params.error as
+					| { message?: string }
+					| string
+					| undefined;
+				const errMsg =
+					typeof errObj === "string"
+						? errObj
+						: (errObj?.message ?? params.message ?? "tool error");
+				if (tcId) updateToolResult(tcId, undefined, errMsg);
+				break;
+			}
+			case "turn-complete": {
+				finishStreaming();
+				break;
+			}
+			case "status": {
+				const stype = params.type;
+				if (stype === "busy" || stype === "running") {
+					sending = true;
+				} else {
+					finishStreaming();
+				}
+				break;
+			}
+			case "error":
+			case "provider-error": {
+				const errObj = params.error as
+					| { message?: string }
+					| string
+					| undefined;
+				const msg =
+					typeof errObj === "string"
+						? errObj
+						: (errObj?.message ?? params.message ?? "Unknown error");
+				addErrorMessage(msg);
+				sending = false;
+				break;
+			}
+			case "finish":
+			case "step-finish":
+			case "text-end":
+			case "reasoning-end":
+			case "tool-input-end":
+				// no-op boundaries
+				break;
+			default:
+				break;
+		}
+	}
 
-  function connectSSE(sid: string): void {
-    if (eventSource) eventSource.close()
-    eventSource = new EventSource(`/api/v1/sessions/${sid}/stream`)
-    eventSource.onmessage = e => {
-      try {
-        const ev = JSON.parse(e.data) as StreamEvent
-        handleEvent(ev)
-      } catch {
-        // ignore parse errors
-      }
-    }
-    // EventSource auto-reconnects on error; no manual handling needed
-  }
+	function connectSSE(sid: string): void {
+		if (eventSource) eventSource.close();
+		eventSource = new EventSource(`/api/v1/sessions/${sid}/stream`);
+		eventSource.onmessage = (e) => {
+			try {
+				const ev = JSON.parse(e.data) as StreamEvent;
+				handleEvent(ev);
+			} catch {
+				// ignore parse errors
+			}
+		};
+		// EventSource auto-reconnects on error; no manual handling needed
+	}
 
-  async function fetchMessages(before?: string): Promise<void> {
-    loading = true
-    const r = await api.sessions.messages(sessionId(), { limit: 50, before })
-    r.match(
-      data => {
-        const chat = mapMessagesToChat(data.messages)
-        bumpSeqAfter(chat)
-        if (before) {
-          const existing = new Set(messages.map(m => m.id))
-          const merged = [...chat.filter(m => !existing.has(m.id)), ...messages]
-          messages = merged
-        } else {
-          const pending = messages.filter(m => m.status === 'pending')
-          messages = [...pending, ...chat]
-        }
-        hasMore = data.hasMore
-        loading = false
-      },
-      () => {
-        loading = false
-      },
-    )
-  }
+	async function fetchMessages(before?: string): Promise<void> {
+		loading = true;
+		const r = await api.sessions.messages(sessionId(), { limit: 50, before });
+		r.match(
+			(data) => {
+				const chat = mapMessagesToChat(data.messages);
+				bumpSeqAfter(chat);
+				if (before) {
+					const existing = new Set(messages.map((m) => m.id));
+					const merged = [
+						...chat.filter((m) => !existing.has(m.id)),
+						...messages,
+					];
+					messages = merged;
+				} else {
+					const pending = messages.filter((m) => m.status === "pending");
+					messages = [...pending, ...chat];
+				}
+				hasMore = data.hasMore;
+				loading = false;
+			},
+			() => {
+				loading = false;
+			},
+		);
+	}
 
-  async function recover(curMount: number): Promise<void> {
-    const r = await api.sessions.state(sessionId())
-    if (curMount !== mountId) return
-    r.match(
-      state => {
-        if (state.status === 'busy' || state.status === 'running') {
-          sending = true
-          streamingId = uid()
-          messages = [
-            ...messages,
-            {
-              id: streamingId,
-              role: 'assistant',
-              status: 'streaming',
-              parts: [],
-              createdAt: new Date().toISOString(),
-              seq: allocSeq(),
-            },
-          ]
-        }
-      },
-      () => {},
-    )
-  }
+	async function recover(curMount: number): Promise<void> {
+		const r = await api.sessions.state(sessionId());
+		if (curMount !== mountId) return;
+		r.match(
+			(state) => {
+				if (state.status === "busy" || state.status === "running") {
+					sending = true;
+					streamingId = uid();
+					messages = [
+						...messages,
+						{
+							id: streamingId,
+							role: "assistant",
+							status: "streaming",
+							parts: [],
+							createdAt: new Date().toISOString(),
+							seq: allocSeq(),
+						},
+					];
+				}
+			},
+			() => {},
+		);
+	}
 
-  async function init(): Promise<() => void> {
-    const cur = ++mountId
-    await fetchMessages()
-    if (cur !== mountId) return () => {}
-    await recover(cur)
-    if (cur !== mountId) return () => {}
-    connectSSE(sessionId())
-    return () => {
-      mountId = 0
-      if (deltaRafId != null) cancelAnimationFrame(deltaRafId)
-      if (eventSource) {
-        eventSource.close()
-        eventSource = null
-      }
-    }
-  }
+	async function init(): Promise<() => void> {
+		const cur = ++mountId;
+		await fetchMessages();
+		if (cur !== mountId) return () => {};
+		await recover(cur);
+		if (cur !== mountId) return () => {};
+		connectSSE(sessionId());
+		return () => {
+			mountId = 0;
+			if (deltaRafId != null) cancelAnimationFrame(deltaRafId);
+			if (eventSource) {
+				eventSource.close();
+				eventSource = null;
+			}
+		};
+	}
 
-  async function send(text: string): Promise<void> {
-    const trimmed = text.trim()
-    if (!trimmed || sending) return
-    sending = true
-    // optimistic: clear any stale streaming, add pending user msg + streaming placeholder
-    const optimisticUserSeq = allocSeq()
-    messages = [
-      ...messages.filter(m => m.status !== 'streaming'),
-      {
-        id: uid(),
-        role: 'user',
-        status: 'pending',
-        parts: [{ id: uid(), type: 'text', text: trimmed }],
-        createdAt: new Date().toISOString(),
-        seq: optimisticUserSeq,
-      },
-    ]
-    streamingId = uid()
-    messages = [
-      ...messages,
-      {
-        id: streamingId,
-        role: 'assistant',
-        status: 'streaming',
-        parts: [],
-        createdAt: new Date().toISOString(),
-        seq: allocSeq(),
-      },
-    ]
-    const r = await api.sessions.prompt(sessionId(), trimmed)
-    r.match(
-      data => {
-        // swap the optimistic pending user message id for the real one
-        // (guard: an empty messageId must not collapse two rows onto one id)
-        if (data.messageId) {
-          messages = messages.map(m =>
-            m.status === 'pending' && m.role === 'user'
-              ? { ...m, id: data.messageId, status: 'complete' as const }
-              : m,
-          )
-        }
-      },
-      err => {
-        addErrorMessage(typeof err === 'string' ? err : 'Send failed')
-        sending = false
-      },
-    )
-  }
+	async function send(
+		text: string,
+		attachmentCodes: string[] = [],
+	): Promise<void> {
+		const trimmed = text.trim();
+		if ((!trimmed && attachmentCodes.length === 0) || sending) return;
+		sending = true;
+		// optimistic: clear any stale streaming, add pending user msg + streaming placeholder
+		const optimisticUserSeq = allocSeq();
+		messages = [
+			...messages.filter((m) => m.status !== "streaming"),
+			{
+				id: uid(),
+				role: "user",
+				status: "pending",
+				parts: [{ id: uid(), type: "text", text: trimmed }],
+				createdAt: new Date().toISOString(),
+				seq: optimisticUserSeq,
+			},
+		];
+		streamingId = uid();
+		messages = [
+			...messages,
+			{
+				id: streamingId,
+				role: "assistant",
+				status: "streaming",
+				parts: [],
+				createdAt: new Date().toISOString(),
+				seq: allocSeq(),
+			},
+		];
+		const r = await api.sessions.prompt(sessionId(), trimmed, attachmentCodes);
+		r.match(
+			(data) => {
+				// swap the optimistic pending user message id for the real one
+				// (guard: an empty messageId must not collapse two rows onto one id)
+				if (data.messageId) {
+					messages = messages.map((m) =>
+						m.status === "pending" && m.role === "user"
+							? { ...m, id: data.messageId, status: "complete" as const }
+							: m,
+					);
+				}
+			},
+			(err) => {
+				addErrorMessage(typeof err === "string" ? err : "Send failed");
+				sending = false;
+			},
+		);
+	}
 
-  async function loadMore(): Promise<void> {
-    if (!hasMore || loading) return
-    const first = sortedMsgs.find(m => m.status === 'complete')
-    if (!first) return
-    // Capture the id of the message currently anchoring the viewport so the
-    // caller can restore scroll position after prepending history.
-    const anchorId = first.id
-    await fetchMessages(anchorId)
-    return anchorId
-  }
+	async function loadMore(): Promise<void> {
+		if (!hasMore || loading) return;
+		const first = sortedMsgs.find((m) => m.status === "complete");
+		if (!first) return;
+		// Capture the id of the message currently anchoring the viewport so the
+		// caller can restore scroll position after prepending history.
+		const anchorId = first.id;
+		await fetchMessages(anchorId);
+		return anchorId;
+	}
 
-  async function abort(): Promise<void> {
-    await api.sessions.interrupt(sessionId())
-    finishStreaming()
-  }
+	async function abort(): Promise<void> {
+		await api.sessions.interrupt(sessionId());
+		finishStreaming();
+	}
 
+	async function revert(messageId: string): Promise<void> {
+		const current = sortedMsgs;
+		// Interrupt any in-flight turn first so a mid-stream undo cannot race a
+		// socketed/stale result back into the message list after the tip moved.
+		if (sending) {
+			await api.sessions.interrupt(sessionId());
+		}
+		await api.sessions.revert(sessionId(), messageId);
+		const idx = current.findIndex((m) => m.id === messageId);
+		const keep = idx >= 0 ? current.slice(0, idx) : current;
+		messages = keep.map((m) =>
+			m.status === "streaming" ? { ...m, status: "complete" as const } : m,
+		);
+		streamingId = null;
+		sending = false;
+		void fetchMessages();
+	}
 
-  async function revert(messageId: string): Promise<void> {
-    const current = sortedMsgs
-    // Interrupt any in-flight turn first so a mid-stream undo cannot race a
-    // socketed/stale result back into the message list after the tip moved.
-    if (sending) {
-      await api.sessions.interrupt(sessionId())
-    }
-    await api.sessions.revert(sessionId(), messageId)
-    const idx = current.findIndex(m => m.id === messageId)
-    const keep = idx >= 0 ? current.slice(0, idx) : current
-    messages = keep.map(m =>
-      m.status === 'streaming' ? { ...m, status: 'complete' as const } : m,
-    )
-    streamingId = null
-    sending = false
-    void fetchMessages()
-  }
+	function onSessionEvent(
+		cb: (event: string, params: Record<string, unknown>) => void,
+	): () => void {
+		sessionEventListeners.add(cb);
+		return () => sessionEventListeners.delete(cb);
+	}
 
-  function onSessionEvent(
-    cb: (event: string, params: Record<string, unknown>) => void,
-  ): () => void {
-    sessionEventListeners.add(cb)
-    return () => sessionEventListeners.delete(cb)
-  }
-
-  return {
-    onSessionEvent,
-    get messages() {
-      return sortedMsgs
-    },
-    get sending() {
-      return sending
-    },
-    get loading() {
-      return loading
-    },
-    get hasMore() {
-      return hasMore
-    },
-    send,
-    loadMore,
-    abort,
-    revert,
-    init,
-  }
+	return {
+		onSessionEvent,
+		get messages() {
+			return sortedMsgs;
+		},
+		get sending() {
+			return sending;
+		},
+		get loading() {
+			return loading;
+		},
+		get hasMore() {
+			return hasMore;
+		},
+		send,
+		loadMore,
+		abort,
+		revert,
+		init,
+	};
 }

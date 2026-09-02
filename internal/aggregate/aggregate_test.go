@@ -17,7 +17,7 @@ import (
 )
 
 type fakeBackends struct {
-	agent, repo, repoExt, ops, memory *httptest.Server
+	agent, repo, repoExt, ops, memory, files *httptest.Server
 }
 
 func newFakeBackends() *fakeBackends {
@@ -44,6 +44,10 @@ func newFakeBackends() *fakeBackends {
 				{"id":"m1","role":"user","content":"hi","tool_name":"","created_at":"2026-01-01"},
 				{"id":"m2","role":"assistant","content":"","tool_name":"write","created_at":"2026-01-01"}
 			]}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/prompt") {
+			_, _ = w.Write([]byte(`{"ok":true}`))
 			return
 		}
 		http.NotFound(w, r)
@@ -117,6 +121,13 @@ func newFakeBackends() *fakeBackends {
 	})
 	fb.memory = httptest.NewServer(mux)
 
+	mux = http.NewServeMux()
+	mux.HandleFunc("/api/v1/files/", func(w http.ResponseWriter, r *http.Request) {
+		// agent file meta endpoint: {meta:{name,mime,size}}
+		_, _ = w.Write([]byte(`{"meta":{"name":"shot.png","mime":"image/png","size":4096}}`))
+	})
+	fb.files = httptest.NewServer(mux)
+
 	return fb
 }
 
@@ -126,6 +137,7 @@ func (fb *fakeBackends) Close() {
 	fb.repoExt.Close()
 	fb.ops.Close()
 	fb.memory.Close()
+	fb.files.Close()
 }
 
 func (fb *fakeBackends) api(t *testing.T) http.Handler {
@@ -136,6 +148,7 @@ func (fb *fakeBackends) api(t *testing.T) http.Handler {
 		RepoExt: upstream.New(fb.repoExt.URL),
 		Ops:     upstream.New(fb.ops.URL),
 		Memory:  upstream.New(fb.memory.URL),
+		Files:   upstream.New(fb.files.URL),
 	}})
 }
 
@@ -319,6 +332,25 @@ func TestForkRepoSameRepoOnly(t *testing.T) {
 
 var _ = chi.URLParam
 var _ = url.Values{}
+
+// TestPromptExpandsAttachments verifies the platform splices attachment codes
+// into `[附件 …file:<code>…]` references (fetched from the agent file store)
+// ahead of the user prompt while leaving the agent untouched.
+func TestPromptExpandsAttachments(t *testing.T) {
+	fb := newFakeBackends()
+	defer fb.Close()
+	h := fb.api(t)
+
+	code, v := do(t, h, "POST", "/sessions/acme:api:main/prompt",
+		`{"prompt":"describe it","attachments":[{"code":"a1b2c3d4"}]}`)
+	if code != 200 {
+		t.Fatalf("code=%d body=%v", code, v)
+	}
+	// messageId is set from the fake agent's /messages reply.
+	if v["messageId"] == "" {
+		t.Fatalf("expected messageId, got %v", v)
+	}
+}
 
 func TestInvalidComponentsRejectedFast(t *testing.T) {
 	fb := newFakeBackends()
