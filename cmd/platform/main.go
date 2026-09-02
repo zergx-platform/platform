@@ -21,14 +21,14 @@ import (
 	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
 	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/manifest"
 	natsbus "forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/transport/nats"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/env"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/aggregate"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/auth"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/cors"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/proxy"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/sessionstate"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/web"
+	"github.com/zergx-platform/zergx/internal/env"
+	"github.com/zergx-platform/zergx/internal/aggregate"
+	"github.com/zergx-platform/zergx/internal/auth"
+	"github.com/zergx-platform/zergx/internal/cors"
+	"github.com/zergx-platform/zergx/internal/proxy"
+	"github.com/zergx-platform/zergx/internal/sessionstate"
+	"github.com/zergx-platform/zergx/internal/upstream"
+	"github.com/zergx-platform/zergx/web"
 )
 
 func main() {

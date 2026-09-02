@@ -33,7 +33,7 @@ import (
 	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/bus"
 	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/extension"
 	"forgejo.develop.10.199.64.20.nip.io/abc-protocol/sdk-go/protocol"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
+	"github.com/zergx-platform/zergx/internal/upstream"
 )
 
 const (

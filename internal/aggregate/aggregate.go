@@ -19,10 +19,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"forgejo.develop.10.199.64.20.nip.io/zergx/go-shared/naming"
+	"github.com/zergx-platform/zergx/internal/naming"
 
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/sessionstate"
-	"forgejo.develop.10.199.64.20.nip.io/zergx/platform/internal/upstream"
+	"github.com/zergx-platform/zergx/internal/sessionstate"
+	"github.com/zergx-platform/zergx/internal/upstream"
 )
 
 type API struct {
