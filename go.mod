@@ -3,7 +3,7 @@ module github.com/zergx-platform/zergx
 go 1.26
 
 require (
-	github.com/abcp-sdk/abc-protocol-go v1.0.3
+	github.com/abcp-sdk/abc-protocol-go v1.0.6
 	github.com/go-chi/chi/v5 v5.3.2
 )
 
