@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -60,7 +61,53 @@ func Router(a *API) http.Handler {
 	r.Get("/packages/{type}/{name}/versions", a.packageVersions)
 	r.Delete("/packages/{type}/{name}", a.packageDelete)
 	r.Delete("/packages/{type}/{name}/{version}", a.packageVersionDelete)
+	// jjlab pass-through reads (repo detail surfaces for the mobile app).
+	r.Get("/repos/{org}/{repo}/releases", a.jjJSON)
+	r.Get("/repos/{org}/{repo}/releases/{tag}", a.jjJSON)
+	r.Get("/repos/{org}/{repo}/releases/{tag}/assets/{name}", a.jjStream)
+	r.Get("/repos/{org}/{repo}/tags", a.jjJSON)
+	r.Get("/repos/{org}/{repo}/branches", a.jjJSON)
+	r.Get("/repos/{org}/{repo}/archive/tarball/{sha}", a.jjStream)
 	return r
+}
+
+// jjJSON passes a GET straight through to jjlab and relays the JSON body
+// verbatim (releases / tags / branches …). The request path is forwarded
+// as-is under /api/v1.
+func (a *API) jjJSON(w http.ResponseWriter, r *http.Request) {
+	resp, err := a.Up.Repo.Do(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query())
+	if err != nil {
+		badGateway(w, "jjlab", err)
+		return
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		badGateway(w, "jjlab", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(body)
+}
+
+// jjStream proxies a binary download (release assets, source tarballs)
+// without buffering: status + relevant headers pass through and the body is
+// copied straight to the client.
+func (a *API) jjStream(w http.ResponseWriter, r *http.Request) {
+	resp, err := a.Up.Repo.Do(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query())
+	if err != nil {
+		badGateway(w, "jjlab", err)
+		return
+	}
+	defer resp.Body.Close()
+	for _, h := range []string{"Content-Type", "Content-Length", "Content-Disposition", "Etag"} {
+		if v := resp.Header.Get(h); v != "" {
+			w.Header().Set(h, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
 }
 
 // ---- packages: adapted from the artifact system API ----

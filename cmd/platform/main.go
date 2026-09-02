@@ -238,6 +238,18 @@ func ownedByAggregate(path, method string) bool {
 			}
 		}
 	}
+	// GET /api/v1/repos/{org}/{repo}/{releases|tags|branches|archive/…} are
+	// jjlab pass-throughs owned by the aggregate router.
+	if method == http.MethodGet && strings.HasPrefix(path, "/api/v1/repos/") {
+		rest := strings.TrimPrefix(path, "/api/v1/repos/")
+		for _, suffix := range []string{
+			"/releases", "/tags", "/branches", "/archive/tarball/",
+		} {
+			if strings.Contains(rest, suffix) {
+				return true
+			}
+		}
+	}
 	// /api/v1/sessions/{id}/{action}: id may itself contain ':' but not '/'
 	if strings.HasPrefix(path, "/api/v1/sessions/") {
 		sub := strings.TrimPrefix(path, "/api/v1/sessions/")

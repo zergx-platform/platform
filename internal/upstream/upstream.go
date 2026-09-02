@@ -82,6 +82,31 @@ func WithToken(ctx context.Context, authorization string) context.Context {
 	return context.WithValue(ctx, upstreamTokenKey{}, authorization)
 }
 
+// Do performs a request and returns the raw response WITHOUT consuming the
+// body (streaming pass-through). The caller MUST close resp.Body. A dedicated
+// http.Client without a global timeout is used so large downloads are not
+// killed mid-transfer; the request itself is still context-scoped.
+func (c *Client) Do(ctx context.Context, method, path string, query url.Values) (*http.Response, error) {
+	u := c.Base + path
+	if len(query) > 0 {
+		u += "?" + query.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "token "+c.Token)
+	} else if h := ctx.Value(upstreamTokenKey{}); h != nil {
+		if s, ok := h.(string); ok && s != "" {
+			req.Header.Set("Authorization", s)
+		}
+	}
+	hc := *c.HC
+	hc.Timeout = 0
+	return hc.Do(req)
+}
+
 // JSON performs a request and decodes the response body into out.
 func (c *Client) JSON(ctx context.Context, method, path string, body interface{}, query url.Values, out interface{}) error {
 	status, data, err := c.Raw(ctx, method, path, body, query)
