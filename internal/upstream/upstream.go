@@ -158,7 +158,7 @@ func FromEnv(env func(string) string) *Upstreams {
 		Repo:     New(or("REPO_URL", "ZERGX_JJ_SERVER_URL", "ZERGX_REPO_MANAGER_URL", "http://jj-lab.temp.svc.cluster.local:80")).WithToken(or("JJLAB_TOKEN", "ZERGX_JJLAB_TOKEN", "devtoken")),
 		RepoExt:  New(or("REPOEXT_URL", "ZERGX_REPOEXT_URL", "http://repo-extension.zergx.svc.cluster.local:80")),
 		Ops:      New(or("OPS_URL", "ZERGX_EXECUTOR_URL", "http://ops-extension.zergx.svc.cluster.local:80")),
-		Artifact: New(or("ARTIFACT_URL", "ZERGX_REGISTRY_URL", "http://artifact.zergx.svc.cluster.local")),
+		Artifact: New(or("ARTIFACT_URL", "ZERGX_REGISTRY_URL", "http://jj-lab.temp.svc.cluster.local")),
 		Memory:   New(or("MEMORY_URL", "ZERGX_MEMORY_URL", "http://memory-tools.zergx.svc.cluster.local:80")),
 	}
 }
