@@ -78,6 +78,8 @@ func main() {
 		pair{"/api/v1/git-show", up.Repo.Base},
 		// repo-extension ops surface
 		pair{"/api/v1/session-map", up.RepoExt.Base},
+		// memory-extension file storage (upload / download / meta / presign)
+		pair{"/api/v1/files", up.Files.Base},
 		// ops-extension (sandboxes + deployments + infra + images)
 		pair{"/api/v1/sandboxes", up.Ops.Base},
 		pair{"/api/v1/deployments", up.Ops.Base},
