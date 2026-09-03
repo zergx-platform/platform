@@ -26,6 +26,7 @@ import (
 	"github.com/zergx-platform/zergx/internal/auth"
 	"github.com/zergx-platform/zergx/internal/cors"
 	"github.com/zergx-platform/zergx/internal/proxy"
+	"github.com/zergx-platform/zergx/internal/mirrorstore"
 	"github.com/zergx-platform/zergx/internal/sessionstate"
 	"github.com/zergx-platform/zergx/internal/upstream"
 	"github.com/zergx-platform/zergx/web"
@@ -52,6 +53,7 @@ func main() {
 		} else {
 			natsBus = b
 			states = sessionstate.New(b, up.Agent)
+			api.Mirrors = mirrorstore.New(b, os.Getenv("MIRROR_SECRET_KEY"))
 		}
 	}
 	api.States = states
@@ -242,12 +244,24 @@ func ownedByAggregate(path, method string) bool {
 			}
 		}
 	}
+	// Mirror management + sync are aggregate-owned (PUT/GET/DELETE /mirror and
+	// POST /pull-mirror|/push-mirror), so the config store / secret inject can
+	// run before forwarding to jjlab.
+	if strings.HasPrefix(path, "/api/v1/repos/") {
+		rest := strings.TrimPrefix(path, "/api/v1/repos/")
+		if strings.HasSuffix(rest, "/pull-mirror") || strings.HasSuffix(rest, "/push-mirror") {
+			return method == http.MethodPost
+		}
+		if strings.HasSuffix(rest, "/mirror") {
+			return method == http.MethodGet || method == http.MethodPut || method == http.MethodDelete
+		}
+	}
 	// GET /api/v1/repos/{org}/{repo}/{releases|tags|branches|archive/…} are
 	// jjlab pass-throughs owned by the aggregate router.
 	if method == http.MethodGet && strings.HasPrefix(path, "/api/v1/repos/") {
 		rest := strings.TrimPrefix(path, "/api/v1/repos/")
 		for _, suffix := range []string{
-			"/releases", "/tags", "/branches", "/archive/tarball/",
+			"/releases", "/tags", "/branches", "/archive/tarball/", "/mirror",
 		} {
 			if strings.Contains(rest, suffix) {
 				return true

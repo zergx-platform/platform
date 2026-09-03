@@ -21,6 +21,7 @@ import (
 
 	"github.com/zergx-platform/zergx/internal/naming"
 
+	"github.com/zergx-platform/zergx/internal/mirrorstore"
 	"github.com/zergx-platform/zergx/internal/sessionstate"
 	"github.com/zergx-platform/zergx/internal/upstream"
 )
@@ -31,6 +32,10 @@ type API struct {
 	// abc Bus. Optional: nil in tests → sessions render without the
 	// chat-list extras (preview/unread).
 	States *sessionstate.Store
+	// Mirrors persists per-repo git-mirror config (url + encrypted secret).
+	// Optional: nil → mirror management degrades to 503; pull/push still
+	// accept an inline secret.
+	Mirrors *mirrorstore.Store
 }
 
 func Router(a *API) http.Handler {
@@ -73,7 +78,77 @@ func Router(a *API) http.Handler {
 	// through a JSON-body pass-through rather than the GET-only jjJSON.
 	r.Post("/repos/{org}/{repo}/pull-mirror", a.jjSync)
 	r.Post("/repos/{org}/{repo}/push-mirror", a.jjSync)
+	// Mirror config management (store url + encrypted secret in NATS KV).
+	r.Get("/repos/{org}/{repo}/mirror", a.getMirror)
+	r.Put("/repos/{org}/{repo}/mirror", a.putMirror)
+	r.Delete("/repos/{org}/{repo}/mirror", a.deleteMirror)
 	return r
+}
+
+// getMirror returns the stored mirror config (secret never echoed; only a
+// bool indicating whether a secret is set).
+func (a *API) getMirror(w http.ResponseWriter, r *http.Request) {
+	if a.Mirrors == nil {
+		writeErr(w, http.StatusServiceUnavailable, "mirror storage unavailable")
+		return
+	}
+	org, repo := pathParam(r, "org"), pathParam(r, "repo")
+	cfg, ok, err := a.Mirrors.Get(r.Context(), org, repo)
+	if err != nil {
+		badGateway(w, "mirrorstore", err)
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok": true, "pull_url": "", "push_url": "", "push_secret_set": false,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":              true,
+		"pull_url":        cfg.PullURL,
+		"push_url":        cfg.PushURL,
+		"push_secret_set": cfg.PushSecret != "",
+	})
+}
+
+// putMirror persists a mirror config. Empty-string fields are kept as-set
+// (the caller decides); omitempty keeps unset fields out of the payload.
+func (a *API) putMirror(w http.ResponseWriter, r *http.Request) {
+	if a.Mirrors == nil {
+		writeErr(w, http.StatusServiceUnavailable, "mirror storage unavailable")
+		return
+	}
+	org, repo := pathParam(r, "org"), pathParam(r, "repo")
+	var body struct {
+		PullURL    string `json:"pull_url"`
+		PushURL    string `json:"push_url"`
+		PushSecret string `json:"push_secret"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	cfg := mirrorstore.Cfg{PullURL: body.PullURL, PushURL: body.PushURL, PushSecret: body.PushSecret}
+	if err := a.Mirrors.Put(r.Context(), org, repo, cfg); err != nil {
+		badGateway(w, "mirrorstore", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+}
+
+// deleteMirror clears the stored mirror config.
+func (a *API) deleteMirror(w http.ResponseWriter, r *http.Request) {
+	if a.Mirrors == nil {
+		writeErr(w, http.StatusServiceUnavailable, "mirror storage unavailable")
+		return
+	}
+	org, repo := pathParam(r, "org"), pathParam(r, "repo")
+	if err := a.Mirrors.Delete(r.Context(), org, repo); err != nil {
+		badGateway(w, "mirrorstore", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }
 
 // jjSync passes a POST straight through to jjlab (pull/push mirror). The body
@@ -84,6 +159,39 @@ func (a *API) jjSync(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
+	}
+	// If the caller didn't supply a secret / url but we have a stored config
+	// for this repo, fill the blanks so pull/push can reuse it without the
+	// client holding the secret.
+	if a.Mirrors != nil && strings.Contains(r.URL.Path, "/mirror") {
+		path := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/")
+		segs := strings.Split(strings.Trim(path, "/"), "/")
+		if len(segs) >= 3 {
+			org, repo := segs[0], segs[1]
+			if cfg, ok, _ := a.Mirrors.Get(r.Context(), org, repo); ok {
+				var m map[string]interface{}
+				if json.Unmarshal(body, &m) == nil {
+					changed := false
+					if ms, _ := m["url"].(string); ms == "" && cfg.PullURL != "" {
+						m["url"] = cfg.PullURL
+						changed = true
+					}
+					if cfg.PushURL != "" {
+						m["url"] = cfg.PushURL
+						changed = true
+					}
+					if ms, _ := m["secret"].(string); ms == "" && cfg.PushSecret != "" {
+						m["secret"] = cfg.PushSecret
+						changed = true
+					}
+					if changed {
+						if b, err := json.Marshal(m); err == nil {
+							body = b
+						}
+					}
+				}
+			}
+		}
 	}
 	resp, err := a.Up.Repo.DoRaw(r.Context(), http.MethodPost, r.URL.Path, r.URL.Query(), body)
 	if err != nil {
