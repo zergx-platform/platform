@@ -737,10 +737,11 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 			Content   string `json:"content"`
 			ToolName  string `json:"tool_name"`
 			ToolParts []struct {
-				Type   string      `json:"type"`
-				Name   string      `json:"name"`
-				Input  interface{} `json:"input"`
-				Result string      `json:"result"`
+				Type     string      `json:"type"`
+				Name     string      `json:"name"`
+				Input    interface{} `json:"input"`
+				Result   string      `json:"result"`
+				Metadata interface{} `json:"metadata"`
 			} `json:"tool_parts"`
 			CreatedAt string `json:"created_at"`
 		} `json:"messages"`
@@ -754,14 +755,25 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 		parts := []map[string]interface{}{}
 		if len(m.ToolParts) > 0 {
 			for _, tp := range m.ToolParts {
+				state := map[string]interface{}{
+					"status": "complete",
+					"input":  tp.Input,
+					"output": tp.Result,
+				}
+				// Surface tool metadata (change_id/diff from write/edit tools)
+				// so the UI can render the change badge after a reload, not
+				// only during streaming.
+				if md, ok := tp.Metadata.(map[string]interface{}); ok {
+					for _, k := range []string{"change_id", "diff"} {
+						if v, present := md[k]; present {
+							state[k] = v
+						}
+					}
+				}
 				parts = append(parts, map[string]interface{}{
-					"type": "tool",
-					"tool": tp.Name,
-					"state": map[string]interface{}{
-						"status": "complete",
-						"input":  tp.Input,
-						"output": tp.Result,
-					},
+					"type":  "tool",
+					"tool":  tp.Name,
+					"state": state,
 				})
 			}
 		} else if m.Role == "compaction" {

@@ -63,6 +63,7 @@ func main() {
 	table, err := proxy.NewTable(
 		// agent-owned surfaces not adapted by the aggregate layer
 		pair{"/api/v1/sessions", up.Agent.Base}, // aggregate wins on its exact subpaths first
+		pair{"/api/v1/worksheets", up.Agent.Base},
 		pair{"/api/v1/presets", up.Agent.Base},
 		pair{"/api/v1/providers", up.Agent.Base},
 		pair{"/api/v1/models", up.Agent.Base},
