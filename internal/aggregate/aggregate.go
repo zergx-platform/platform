@@ -495,6 +495,7 @@ func recSession(m map[string]interface{}) map[string]interface{} {
 		"tip_id":             m["tip_id"],
 		"max_turns":          num("max_turns"),
 		"system_prompt":      str("system_prompt"),
+		"locale":             str("locale"),
 		"input_tokens":       num("input_tokens"),
 		"output_tokens":      num("output_tokens"),
 		"total_tokens":       num("total_tokens"),
