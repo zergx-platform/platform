@@ -83,12 +83,25 @@ export const ToolConfigFieldSchema = z.object({
 })
 export type ToolConfigField = z.infer<typeof ToolConfigFieldSchema>
 
+/** A declared extension config knob (mirrors the agent ExtensionConfigItem). */
+export const ToolConfigItemSchema = z.object({
+  name: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'enum', 'json']),
+  enum_values: z.array(z.string()).optional(),
+  default: z.unknown().optional(),
+  description: z.string().optional(),
+  scope: z.enum(['global', 'session']).default('global'),
+})
+export type ToolConfigItem = z.infer<typeof ToolConfigItemSchema>
+
 export const ToolInfoSchema = z.object({
   name: z.string(),
   description: z.string(),
   category: z.string(),
   parameters: z.record(z.string(), z.unknown()).nullable(),
   configFields: z.array(ToolConfigFieldSchema).nullable(),
+  /** Data-driven extension config knobs surfaced by the agent on /tools. */
+  config: z.array(ToolConfigItemSchema).nullable(),
 })
 export type ToolInfo = z.infer<typeof ToolInfoSchema>
 

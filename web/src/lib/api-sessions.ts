@@ -47,6 +47,15 @@ export const tools = {
 			cfg,
 			z.object({ ok: z.boolean(), config: ToolConfigMapSchema }),
 		),
+	// Set a single extension config knob by id (e.g. memory/vlm_model).
+	// The agent validates against the extension's declared config and delivers
+	// the value to the live extension, so tools pick it up immediately.
+	setConfigValue: (extId: string, name: string, value: unknown) =>
+		put(
+			`/api/v1/tool-config/${encodeURIComponent(extId)}/${encodeURIComponent(name)}`,
+			{ value },
+			z.object({ ok: z.boolean() }),
+		),
 };
 
 export const sessions = {

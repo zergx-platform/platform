@@ -35,12 +35,11 @@ function openPresetEdit(p: PresetInfo) {
 }
 
 function togglePresetEdit(p: PresetInfo) {
-  if (p.is_system) return
-  if (editingId === p.id) {
-    editingId = null
-  } else {
-    openPresetEdit(p)
-  }
+	if (editingId === p.id) {
+		editingId = null
+	} else {
+		openPresetEdit(p)
+	}
 }
 
 async function savePresetEdit() {
@@ -128,16 +127,30 @@ function toggleTool(tool: string) {
                     <!-- #key re-mounts the whole editor whenever the expanded preset id changes -->
                     {#key editingId}
                         <div class="px-3 py-3 border-t border-border space-y-3 bg-card/50">
+                            {#if p.is_system}
+                                <!-- Read-only view for an immutable system preset -->
+                                <p class="text-[10px] text-amber-600 dark:text-amber-500">System preset - read only, cannot edit or delete.</p>
+                                <div>
+                                    <label class="text-xs font-semibold text-muted-foreground block mb-1">System Prompt</label>
+                                    <pre class="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono whitespace-pre-wrap break-all min-h-[80px] max-h-[260px] overflow-auto">{p.system_prompt}</pre>
+                                </div>
+                                <div>
+                                    <span class="text-xs font-semibold text-muted-foreground block mb-1">Max Turns</span>
+                                    <span class="text-xs font-mono">{p.max_turns}</span>
+                                </div>
+                                <div>
+                                    <span class="text-xs font-semibold text-muted-foreground block mb-1">Tools ({p.tools.length})</span>
+                                    <div class="flex flex-wrap gap-1">
+                                        {#each p.tools as t (t)}
+                                            <span class="px-2 py-0.5 rounded text-[10px] border border-border bg-muted/50">{t}</span>
+                                        {/each}
+                                    </div>
+                                </div>
+                            {:else}
                             <div>
                                 <label class="text-xs font-semibold text-muted-foreground block mb-1" for="pe-sys-prompt-{p.id}">System Prompt</label>
                                 <textarea id="pe-sys-prompt-{p.id}" class="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono min-h-[80px] resize-y"
                                     bind:value={editData.system_prompt}></textarea>
-                            </div>
-
-                            <div>
-                                <label class="text-xs font-semibold text-muted-foreground block mb-1" for="pe-max-turns-{p.id}">Max Turns</label>
-                                <input id="pe-max-turns-{p.id}" type="number" min="1" max="200" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                                    bind:value={editData.max_turns} />
                             </div>
 
                             <div>
@@ -153,10 +166,17 @@ function toggleTool(tool: string) {
                                 </div>
                             </div>
 
+                            <div>
+                                <label class="text-xs font-semibold text-muted-foreground block mb-1" for="pe-max-turns-{p.id}">Max Turns</label>
+                                <input id="pe-max-turns-{p.id}" type="number" min="1" max="200" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                                    bind:value={editData.max_turns} />
+                            </div>
+
                             <div class="flex justify-end gap-1">
                                 <Button size="sm" variant="outline" onclick={savePresetEdit}><Save class="size-3 mr-1" /> Save</Button>
                                 <Button size="sm" variant="ghost" onclick={() => (editingId = null)}><X class="size-3" /></Button>
                             </div>
+                            {/if}
                         </div>
                     {/key}
                 {/if}

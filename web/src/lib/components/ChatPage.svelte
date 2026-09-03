@@ -35,6 +35,7 @@ import type {
 	Todo,
 } from "$lib/api";
 import * as api from "$lib/api";
+import { uploadFile } from "$lib/api-files";
 import { Button } from "$lib/components/ui/button";
 import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
 import ChatSidebar from "./ChatSidebar.svelte";
@@ -55,7 +56,6 @@ let attachError = $state("");
 let scrollEl: HTMLDivElement | undefined;
 let sessionSettings = $state<{
 	max_turns?: number | null;
-	system_prompt?: string | null;
 	preset?: string;
 	base_image?: string;
 }>({});
@@ -161,7 +161,6 @@ $effect(() => {
 	if (s) {
 		sessionSettings = {
 			max_turns: s.max_turns,
-			system_prompt: s.system_prompt,
 			preset: s.preset,
 			base_image: s.base_image ?? undefined,
 		};
@@ -466,8 +465,6 @@ async function saveSettings() {
 		updates.preset = sessionSettings.preset;
 	if (sessionSettings.max_turns !== undefined)
 		updates.max_turns = sessionSettings.max_turns;
-	if (sessionSettings.system_prompt !== undefined)
-		updates.system_prompt = sessionSettings.system_prompt || null;
 	if (sessionSettings.base_image !== undefined)
 		updates.base_image = sessionSettings.base_image;
 	const r = await api.sessions.settings(store.activeSessionId, updates);
@@ -496,7 +493,7 @@ async function onFiles(e: Event) {
 	uploading = true;
 	attachError = "";
 	for (const f of files) {
-		const r = await api.files.uploadFile(f);
+		const r = await uploadFile(f);
 		if (r.isOk()) {
 			pendingFiles = [...pendingFiles, { code: r.value.code, name: r.value.name, size: r.value.size }];
 		} else {
@@ -601,40 +598,38 @@ async function compact() {
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="fixed inset-0 z-30" role="presentation" onclick={() => showSettings = false}></div>
         <div class="absolute top-10 right-3 z-40 w-80 rounded-lg border bg-popover shadow-lg p-4 space-y-3" role="dialog" tabindex="-1" aria-label="Session settings" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-            <div class="flex items-center justify-between">
-                <span class="text-sm font-semibold">Session Settings</span>
-                <Button variant="ghost" size="icon-sm" onclick={() => showSettings = false}><X class="size-3" /></Button>
-            </div>
+						<div class="flex items-center justify-between">
+				<span class="text-sm font-semibold">Session Settings</span>
+				<Button variant="ghost" size="icon-sm" onclick={() => showSettings = false}><X class="size-3" /></Button>
+			</div>
 
-            <div>
-                <label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="ss-preset">Preset</label>
-                <select id="ss-preset" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    bind:value={sessionSettings.preset}>
-                    {#each presets as p (p.id)}
-                        <option value={p.id}>{p.id}</option>
-                    {/each}
-                </select>
-            </div>
+			<div>
+				<label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="ss-preset">Preset</label>
+				<select id="ss-preset" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+					bind:value={sessionSettings.preset}>
+					{#each presets as p (p.id)}
+						<option value={p.id}>{p.id}</option>
+					{/each}
+				</select>
+			</div>
 
-            <div>
-                <label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="ss-max-turns">Max Turns</label>
-                <input id="ss-max-turns" type="number" min="1" max="200" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    bind:value={sessionSettings.max_turns} placeholder="inherit" />
-            </div>
+			<div>
+				<label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="ss-max-turns">Max Turns</label>
+				<input id="ss-max-turns" type="number" min="1" max="200" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+					bind:value={sessionSettings.max_turns} placeholder="inherit" />
+			</div>
 
-            <div>
-                <label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="ss-sys-prompt">System Prompt (blank = inherit from preset)</label>
-                <textarea id="ss-sys-prompt" class="w-full rounded-md border border-input bg-background px-2 py-1 text-[10px] font-mono min-h-[60px] resize-y"
-                    bind:value={sessionSettings.system_prompt} placeholder="use preset default"></textarea>
-            </div>
+			<div class="text-[10px] text-muted-foreground">
+				System prompt is determined by the selected preset.
+			</div>
 
-            <div>
-                <label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="ss-base-image">Worker Base Image</label>
-                <select id="ss-base-image" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    bind:value={sessionSettings.base_image}>
-                    <option value="">default (debian:trixie-slim)</option>
-                </select>
-            </div>
+			<div>
+				<label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="ss-base-image">Worker Base Image</label>
+				<select id="ss-base-image" class="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+					bind:value={sessionSettings.base_image}>
+					<option value="">default (debian:trixie-slim)</option>
+				</select>
+			</div>
 
             <div class="flex justify-end gap-2 pt-1">
                 <Button size="sm" variant="outline" onclick={() => showSettings = false}>Cancel</Button>
