@@ -69,6 +69,8 @@ export const PresetInfoSchema = z.object({
   system_prompt: z.string(),
   tools: z.array(z.string()),
   max_turns: z.number(),
+  /** Immutable system preset (cannot be edited/deleted). */
+  is_system: z.boolean().optional(),
 })
 export type PresetInfo = z.infer<typeof PresetInfoSchema>
 

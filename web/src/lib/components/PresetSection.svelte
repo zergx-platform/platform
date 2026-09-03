@@ -22,8 +22,6 @@ let showNewPreset = $state(false)
 let newPresetId = $state('')
 
 let availableTools = $derived(toolsList.map(t => t.name))
-const seedPresetIds = new Set(['default', 'build', 'plan'])
-
 onMount(async () => {
   const [psr, tlr] = await Promise.all([api.presets.list(), api.tools.list()])
   presets = psr.isOk() ? psr.value : []
@@ -37,6 +35,7 @@ function openPresetEdit(p: PresetInfo) {
 }
 
 function togglePresetEdit(p: PresetInfo) {
+  if (p.is_system) return
   if (editingId === p.id) {
     editingId = null
   } else {
@@ -111,11 +110,14 @@ function toggleTool(tool: string) {
                 <div class="flex items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-accent/50" onclick={() => togglePresetEdit(p)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && togglePresetEdit(p)}>
                     <div class="flex items-center gap-2">
                         <span class="font-medium">{p.id}</span>
+                        {#if p.is_system}
+                            <span class="text-[9px] px-1 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">system</span>
+                        {/if}
                         <span class="text-[10px] text-muted-foreground">turns:{p.max_turns}</span>
                         <span class="text-[10px] text-muted-foreground">tools:{p.tools.length}</span>
                     </div>
                     <div class="flex items-center gap-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
-                        {#if !seedPresetIds.has(p.id)}
+                        {#if !p.is_system}
                             <Button variant="ghost" size="icon-sm" onclick={() => deletePreset(p)}><Trash2 class="size-3 text-destructive" /></Button>
                         {/if}
                         <ChevronDown class="size-3 text-muted-foreground transition-transform {editingId === p.id ? 'rotate-180' : ''}" />

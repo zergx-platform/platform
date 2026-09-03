@@ -1,3 +1,6 @@
 web/dist/
 web/node_modules/
 web/node_modules/
+
+# local build artifact
+/platform
