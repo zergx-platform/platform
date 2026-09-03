@@ -73,6 +73,7 @@ func main() {
 		pair{"/api/v1/zergx-config", up.Agent.Base},
 		// jjlab passthroughs (diff/file/file-log/file-diff/delete/org…)
 		pair{"/api/v1/repos", up.Repo.Base},
+		pair{"/api/v1/orgs", up.Repo.Base},
 		pair{"/git", up.Repo.Base},
 		pair{"/api/v1/git-blame", up.Repo.Base},
 		pair{"/api/v1/git-diff", up.Repo.Base},

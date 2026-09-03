@@ -87,13 +87,28 @@ func WithToken(ctx context.Context, authorization string) context.Context {
 // http.Client without a global timeout is used so large downloads are not
 // killed mid-transfer; the request itself is still context-scoped.
 func (c *Client) Do(ctx context.Context, method, path string, query url.Values) (*http.Response, error) {
+	return c.DoRaw(ctx, method, path, query, nil)
+}
+
+// DoRaw performs a request with an explicit raw body (POST mirror sync etc.)
+// without buffering the response; the caller owns resp.Body. The per-client
+// static token applies (jjlab "token <t>"), no global timeout so large
+// transfers aren't killed.
+func (c *Client) DoRaw(ctx context.Context, method, path string, query url.Values, body []byte) (*http.Response, error) {
 	u := c.Base + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, nil)
+	var rd io.Reader
+	if body != nil {
+		rd = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
 		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	if c.Token != "" {
 		req.Header.Set("Authorization", "token "+c.Token)

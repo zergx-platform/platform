@@ -68,7 +68,37 @@ func Router(a *API) http.Handler {
 	r.Get("/repos/{org}/{repo}/tags", a.jjJSON)
 	r.Get("/repos/{org}/{repo}/branches", a.jjJSON)
 	r.Get("/repos/{org}/{repo}/archive/tarball/{sha}", a.jjStream)
+	// jjlab git-mirror sync: pull/push remote are POST; the request body
+	// (url/remote/branch/secret) must be forwarded verbatim, so route them
+	// through a JSON-body pass-through rather than the GET-only jjJSON.
+	r.Post("/repos/{org}/{repo}/pull-mirror", a.jjSync)
+	r.Post("/repos/{org}/{repo}/push-mirror", a.jjSync)
 	return r
+}
+
+// jjSync passes a POST straight through to jjlab (pull/push mirror). The body
+// is forwarded verbatim so url/remote/branch/secret reach jjlab untouched.
+// The upstream client carries the jjlab static token, so mirror auth works.
+func (a *API) jjSync(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	resp, err := a.Up.Repo.DoRaw(r.Context(), http.MethodPost, r.URL.Path, r.URL.Query(), body)
+	if err != nil {
+		badGateway(w, "jjlab", err)
+		return
+	}
+	defer resp.Body.Close()
+	out, err := io.ReadAll(resp.Body)
+	if err != nil {
+		badGateway(w, "jjlab", err)
+		return
+	}
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(out)
 }
 
 // jjJSON passes a GET straight through to jjlab and relays the JSON body
