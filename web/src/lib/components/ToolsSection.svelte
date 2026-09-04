@@ -110,10 +110,11 @@ function categorizeTools(tools: ToolInfo[]): Map<string, ToolInfo[]> {
 	return cats
 }
 
-/** True when any declared required_config of this tool is unset. */
+/** True when any `required` config knob of this tool is unset. */
 function configMissingRequired(t: ToolInfo): boolean {
-	for (const name of t.required_config ?? []) {
-		const v = toolConfig[t.name]?.[name]
+	for (const c of t.config ?? []) {
+		if (c.required !== true) continue
+		const v = toolConfig[t.name]?.[c.name]
 		if (v == null || v === '') return true
 	}
 	return false
