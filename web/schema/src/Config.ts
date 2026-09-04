@@ -102,6 +102,8 @@ export const ToolInfoSchema = z.object({
   configFields: z.array(ToolConfigFieldSchema).nullable(),
   /** Data-driven extension config knobs surfaced by the agent on /tools. */
   config: z.array(ToolConfigItemSchema).nullable(),
+  /** Config names whose value this tool requires to run (may be shared). */
+  required_config: z.array(z.string()).optional(),
 })
 export type ToolInfo = z.infer<typeof ToolInfoSchema>
 

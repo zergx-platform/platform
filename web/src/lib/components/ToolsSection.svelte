@@ -109,6 +109,15 @@ function categorizeTools(tools: ToolInfo[]): Map<string, ToolInfo[]> {
 	}
 	return cats
 }
+
+/** True when any declared required_config of this tool is unset. */
+function configMissingRequired(t: ToolInfo): boolean {
+	for (const name of t.required_config ?? []) {
+		const v = toolConfig[t.name]?.[name]
+		if (v == null || v === '') return true
+	}
+	return false
+}
 </script>
 
 {#if loading}
@@ -130,7 +139,10 @@ function categorizeTools(tools: ToolInfo[]): Map<string, ToolInfo[]> {
 							</div>
 							<div class="flex items-center gap-2 shrink-0 ml-2">
 								{#if t.config && t.config.length > 0}
-									{#if Object.keys(toolConfig[t.name] ?? {}).length > 0}
+									{@const requiredMissing = configMissingRequired(t)}
+									{#if requiredMissing}
+										<span class="text-[9px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded">required</span>
+									{:else if Object.keys(toolConfig[t.name] ?? {}).length > 0}
 										<span class="text-[9px] bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded">configured</span>
 									{:else}
 										<span class="text-[9px] bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded">needs config</span>

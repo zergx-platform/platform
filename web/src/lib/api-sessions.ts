@@ -41,12 +41,6 @@ export const tools = {
 			(r) => r.tools,
 		),
 	getConfig: () => get(`/api/v1/tool-config`, ToolConfigMapSchema),
-	setConfig: (cfg: ToolConfigMap) =>
-		put(
-			`/api/v1/tool-config`,
-			cfg,
-			z.object({ ok: z.boolean(), config: ToolConfigMapSchema }),
-		),
 	// Set a single extension config knob by id (e.g. memory/vlm_model).
 	// The agent validates against the extension's declared config and delivers
 	// the value to the live extension, so tools pick it up immediately.
