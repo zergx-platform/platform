@@ -5,18 +5,18 @@ const store = getStore()
 
 import { Button } from '$lib/components/ui/button'
 
-let branch = $state('')
+let bookmark = $state('')
 let forking = $state(false)
 let error = $state('')
 
 async function submit() {
-  const b = branch.trim()
+  const b = bookmark.trim()
   if (!b) {
-    error = 'Branch name required'
+    error = 'Bookmark name required'
     return
   }
   if (store.existingBookmarks.includes(b)) {
-    error = 'Branch already exists'
+    error = 'Bookmark already exists'
     return
   }
   error = ''
@@ -36,8 +36,8 @@ async function submit() {
             <!-- svelte-ignore a11y_autofocus -->
             <input
                 class="w-full rounded-md border bg-background px-3 py-2 text-sm {error ? 'border-destructive' : 'border-input'}"
-                placeholder="Branch name"
-                bind:value={branch}
+                placeholder="Bookmark name"
+                bind:value={bookmark}
                 oninput={() => error = ""}
                 onkeydown={(e) => { if (e.key === "Enter") submit() }}
                 autofocus
@@ -47,7 +47,7 @@ async function submit() {
             {/if}
             <div class="flex gap-2 justify-end">
                 <Button variant="outline" onclick={store.closeFork}>Cancel</Button>
-                <Button onclick={submit} disabled={forking || !branch.trim()}>
+                <Button onclick={submit} disabled={forking || !bookmark.trim()}>
                     {forking ? "Forking..." : "Fork"}
                 </Button>
             </div>

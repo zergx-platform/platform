@@ -552,7 +552,7 @@ function termContainer(): Sandbox | undefined {
             <div>
                 <label class="text-xs font-medium text-muted-foreground" for="dep-session">Session (optional)</label>
                 <input id="dep-session" type="text" class="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
-                    placeholder="org:repo:branch" bind:value={deploySession} />
+                    placeholder="org:repo:bookmark" bind:value={deploySession} />
             </div>
 
             {#if deployError}

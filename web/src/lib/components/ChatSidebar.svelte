@@ -52,18 +52,18 @@ let confirmBusy = $state(false)
 let adopting = $state<string | null>(null)
 let adoptError = $state('')
 
-async function openBookmark(org: string, repo: string, branch: string, sessionId: string | null) {
+async function openBookmark(org: string, repo: string, bookmark: string, sessionId: string | null) {
   if (sessionId) {
     store.pickSession(sessionId)
     return
   }
   // Unbound (orphan) bookmark: adopt it — repo-extension creates the
   // workspace session and binds it — then open the chat.
-  const key = `${org}/${repo}/${branch}`
+  const key = `${org}/${repo}/${bookmark}`
   if (adopting) return
   adopting = key
   adoptError = ''
-  const r = await api.repos.adoptSession(org, repo, branch)
+  const r = await api.repos.adoptSession(org, repo, bookmark)
   adopting = null
   if (r.isErr()) {
     adoptError = `${key}: ${r.error}`
@@ -157,7 +157,7 @@ function deleteOrg(org: string, e: Event) {
         </div>
     {/if}
     <div class="flex-1 overflow-y-auto px-2 py-1">
-        <!-- Recent sessions: flat list (org/repo/branch), expanded by default -->
+        <!-- Recent sessions: flat list (org/repo/bookmark), expanded by default -->
         {#if recentSessions.length > 0}
             <div class="mb-2">
                 <div class="px-1 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Recent</div>
@@ -173,7 +173,7 @@ function deleteOrg(org: string, e: Event) {
                         <Clock class="size-3 text-muted-foreground shrink-0" />
                         <span class={cn("text-[11px] flex-1 truncate", isActive && "font-medium")}>
                             {#if s.org}
-                                <span class="font-mono text-muted-foreground">{s.org}/</span>{s.repo}<span class="text-muted-foreground">/{s.branch}</span>
+                                <span class="font-mono text-muted-foreground">{s.org}/</span>{s.repo}<span class="text-muted-foreground">/{bookmark}</span>
                             {:else}
                                 <span class="font-mono">{s.id}</span>
                             {/if}
@@ -186,7 +186,7 @@ function deleteOrg(org: string, e: Event) {
             </div>
         {/if}
 
-        <!-- Browse all: tree view (org/repo/branch), collapsed by default -->
+        <!-- Browse all: tree view (org/repo/bookmark), collapsed by default -->
         <div class="mt-2">
             <div class="px-1 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">All repositories</div>
         {#each store.orgs as orgNode}
@@ -243,14 +243,14 @@ function deleteOrg(org: string, e: Event) {
                                                     {@const isActive = session && store.activeSessionId === session.session_id}
                                                     <div
                                                         class={cn("flex items-center gap-1 rounded px-1 py-0.5 cursor-pointer hover:bg-accent group", isActive && "bg-accent")}
-                                                        onclick={() => { if (adopting === `${orgNode.org}/${repoNode.repo}/${bm.branch}`) return; void openBookmark(orgNode.org, repoNode.repo, bm.branch, session ? session.session_id : null) }}
-                                                        onkeydown={(e) => { if (e.key === "Enter" && adopting !== `${orgNode.org}/${repoNode.repo}/${bm.branch}`) void openBookmark(orgNode.org, repoNode.repo, bm.branch, session ? session.session_id : null) }}
+                                                        onclick={() => { if (adopting === `${orgNode.org}/${repoNode.repo}/${bm.bookmark}`) return; void openBookmark(orgNode.org, repoNode.repo, bm.bookmark, session ? session.session_id : null) }}
+                                                        onkeydown={(e) => { if (e.key === "Enter" && adopting !== `${orgNode.org}/${repoNode.repo}/${bm.bookmark}`) void openBookmark(orgNode.org, repoNode.repo, bm.bookmark, session ? session.session_id : null) }}
                                                         role="button"
                                                         tabindex="0"
                                                     >
                                                         <span class={cn("inline-block h-2 w-2 rounded-full shrink-0", session ? "bg-green-500" : "bg-muted-foreground/40")}></span>
                                                         <span class={cn("text-[11px] flex-1 truncate", isActive && "font-medium", !session && "text-muted-foreground")}>
-                                                            {adopting === `${orgNode.org}/${repoNode.repo}/${bm.branch}` ? `${bm.branch}…` : bm.branch}
+                                                            {adopting === `${orgNode.org}/${repoNode.repo}/${bm.bookmark}` ? `${bm.bookmark}…` : bm.bookmark}
                                                         </span>
                                                         {#if session}
                                                             <button class="rounded p-0.5 text-muted-foreground hover:text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shrink-0"
@@ -258,7 +258,7 @@ function deleteOrg(org: string, e: Event) {
                                                                 <GitFork class="size-2.5" />
                                                             </button>
                                                             <button class="rounded p-0.5 text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shrink-0"
-                                                                onclick={(e) => { e.stopPropagation(); confirm = { title: 'Delete session', description: `Delete session <strong>${bm.branch}</strong> in ${orgNode.org}/${repoNode.repo}?`, action: () => store.deleteBookmark(orgNode.org, repoNode.repo, bm.branch) } }}>
+                                                                onclick={(e) => { e.stopPropagation(); confirm = { title: 'Delete session', description: `Delete session <strong>${bm.bookmark}</strong> in ${orgNode.org}/${repoNode.repo}?`, action: () => store.deleteBookmark(orgNode.org, repoNode.repo, bm.bookmark) } }}>
                                                                 <Trash2 class="size-2.5" />
                                                             </button>
                                                         {/if}
@@ -336,7 +336,7 @@ function deleteOrg(org: string, e: Event) {
                     bind:value={cloneToken}
                     disabled={cloneBusy}
                 />
-                <label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="clone-rev">Branch / tag / commit (optional)</label>
+                <label class="text-[11px] font-semibold text-muted-foreground block mb-1" for="clone-rev">Bookmark / tag / commit (optional)</label>
                 <input
                     id="clone-rev"
                     class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"

@@ -111,7 +111,7 @@ export const SessionRowSchema = z.object({
   id: z.string(),
   org: z.string(),
   repo: z.string(),
-  branch: z.string(),
+  bookmark: z.string(),
   model: z.string(),
   preset: z.string(),
   tipId: z.string().nullable(),
@@ -180,7 +180,7 @@ export const ContainerRowSchema = z.object({
   sessionId: z.string().nullable(),
   org: z.string().nullable(),
   repo: z.string().nullable(),
-  branch: z.string().nullable(),
+  bookmark: z.string().nullable(),
   status: z.string(),
   createdAt: z.string(),
 })
@@ -205,23 +205,23 @@ export const SessionSettingsBodySchema = z.object({
 })
 export type SessionSettingsBody = z.infer<typeof SessionSettingsBodySchema>
 
-export const SessionForkBodySchema = z.object({ branch: z.string().optional() })
+export const SessionForkBodySchema = z.object({ bookmark: z.string().optional() })
 export type SessionForkBody = z.infer<typeof SessionForkBodySchema>
 
 export const RepoForkBodySchema = z.object({
   source_org: z.string(),
   source_repo: z.string(),
-  source_branch: z.string(),
+  source_bookmark: z.string(),
   target_org: z.string(),
   target_repo: z.string(),
-  target_branch: z.string().optional(),
+  target_bookmark: z.string().optional(),
 })
 export type RepoForkBody = z.infer<typeof RepoForkBodySchema>
 
 export const RepoEnsureBodySchema = z.object({
   org: z.string(),
   repo: z.string().optional(),
-  branch: z.string().optional(),
+  bookmark: z.string().optional(),
 })
 export type RepoEnsureBody = z.infer<typeof RepoEnsureBodySchema>
 
@@ -239,7 +239,7 @@ export const ContainerCreateBodySchema = z.object({
   session_id: z.string().optional(),
   org: z.string().optional(),
   repo: z.string().optional(),
-  branch: z.string().optional(),
+  bookmark: z.string().optional(),
 })
 export type ContainerCreateBody = z.infer<typeof ContainerCreateBodySchema>
 
@@ -325,7 +325,7 @@ export type GitCommit = z.infer<typeof GitCommitSchema>
 
 export const RepoBookmarkNodeSchema = z.object({
   session_id: z.string(),
-  branch: z.string(),
+  bookmark: z.string(),
   message_count: z.number(),
   unread: z.number().optional(),
   model: z.string(),

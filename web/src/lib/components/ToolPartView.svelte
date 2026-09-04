@@ -75,7 +75,7 @@ function inputSummary(t: string, inp: Record<string, unknown>): string {
     case 'pull-oci-image':
       return `pull image ${s(inp.image)}`
     case 'pull-git-repo':
-      return `clone ${s(inp.git_url)}${s(inp.branch) ? ` (${s(inp.branch)})` : ''}`
+      return `clone ${s(inp.git_url)}${s(inp['git-url']) ? ` (${s(inp['git-url'])})` : ''}`
     case 'list-registry-packages':
       return `list ${s(inp.protocol) || 'oci'} packages${s(inp.name) ? ` · ${s(inp.name)}` : ''}`
     default:

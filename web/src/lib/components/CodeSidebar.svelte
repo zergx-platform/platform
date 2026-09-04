@@ -20,7 +20,7 @@ import TreeNode from './TreeNode.svelte'
         {/if}
     </div>
     <div class="border-t border-border p-2 shrink-0">
-        <Button variant="ghost" size="sm" class="text-[10px]" onclick={() => store.openRepo(store.codeOrg, store.codeRepo, store.codeBranch)}>
+        <Button variant="ghost" size="sm" class="text-[10px]" onclick={() => store.openRepo(store.codeOrg, store.codeRepo, store.codeBookmark)}>
             <RefreshCw class="size-2.5 mr-1" /> Refresh
         </Button>
     </div>

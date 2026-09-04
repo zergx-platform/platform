@@ -147,7 +147,7 @@ const showTabBar = $derived(router.current !== 'chat' || !store.activeSession)
                                 <Settings class="size-4" />
                             </Button>
                         </div>
-                        <div class="text-xs text-muted-foreground px-4 pb-2 shrink-0">Pick a repo &amp; branch to start chatting</div>
+                        <div class="text-xs text-muted-foreground px-4 pb-2 shrink-0">Pick a repo &amp; bookmark to start chatting</div>
                         <div class="flex-1 overflow-y-auto">
                             <ChatSidebar />
                         </div>

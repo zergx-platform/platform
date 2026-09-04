@@ -26,7 +26,7 @@ type StoreState = {
   rightPanelOpen: boolean
   codeOrg: string
   codeRepo: string
-  codeBranch: string
+  codeBookmark: string
   treeCache: Record<string, FileEntry[]>
   expandedDirs: Set<string>
   selectedFilePath: string | null
@@ -60,7 +60,7 @@ export type Store = StoreState & {
   deleteBookmark(org: string, repo: string, bm: string): Promise<void>
   deleteRepo(org: string, repo: string): Promise<void>
   deleteOrg(org: string): Promise<void>
-  openRepo(org: string, repo: string, branch?: string): Promise<void>
+  openRepo(org: string, repo: string, bookmark?: string): Promise<void>
   bumpSessionRevision(): void
   refreshFileTree(): Promise<void>
   toggleDir(dir: string): Promise<void>
@@ -73,7 +73,7 @@ export type Store = StoreState & {
   loadFileHistory(): Promise<void>
   stepFileBack(): void
   toggleCommitDiff(changeId: string): Promise<void>
-  forkSession(branch: string): Promise<boolean>
+  forkSession(bookmark: string): Promise<boolean>
   pickSession(id: string): void
   openOverlay(v: SessionOverlay): void
   openChange(changeId: string): void
@@ -101,7 +101,7 @@ export function createStore(initTheme?: string): Store {
     rightPanelOpen: true,
     codeOrg: '',
     codeRepo: '',
-    codeBranch: '',
+    codeBookmark: '',
     treeCache: {},
     expandedDirs: new Set(),
     selectedFilePath: null,
@@ -139,20 +139,20 @@ export function createStore(initTheme?: string): Store {
       state.codeOrg,
       state.codeRepo,
       dir,
-      state.codeBranch || undefined,
+      state.codeBookmark || undefined,
     )
     state.treeCache = { ...state.treeCache, [dir]: r.isOk() ? r.value : [] }
     state.codeLoading = false
   }
 
-  // defaultBranchOf picks the bookmark to open when none was given:
+  // defaultBookmarkOf picks the bookmark to open when none was given:
   // main → master → dev → first bookmark ('' when the repo has none yet).
-  function defaultBranchOf(org: string, repo: string): string {
+  function defaultBookmarkOf(org: string, repo: string): string {
     const bms =
       state.orgs
         .find(o => o.org === org)
         ?.repos.find(r => r.repo === repo)
-        ?.bookmarks.map(b => b.branch) ?? []
+        ?.bookmarks.map(b => b.bookmark) ?? []
     for (const pref of ['main', 'master', 'dev']) {
       if (bms.includes(pref)) return pref
     }
@@ -248,11 +248,11 @@ export function createStore(initTheme?: string): Store {
     set codeRepo(v: string) {
       state.codeRepo = v
     },
-    get codeBranch() {
-      return state.codeBranch
+    get codeBookmark() {
+      return state.codeBookmark
     },
-    set codeBranch(v: string) {
-      state.codeBranch = v
+    set codeBookmark(v: string) {
+      state.codeBookmark = v
     },
     get treeCache() {
       return state.treeCache
@@ -333,7 +333,7 @@ export function createStore(initTheme?: string): Store {
       return !!(state.diffChangeId || state.codeFilePath)
     },
     get existingBookmarks() {
-      return state.sessions.map(s => s.branch)
+      return state.sessions.map(s => s.bookmark)
     },
     refreshSessions,
     refreshRepos,
@@ -356,13 +356,13 @@ export function createStore(initTheme?: string): Store {
       await refreshSessions()
       await refreshRepos()
     },
-    async openRepo(org: string, repo: string, branch?: string) {
+    async openRepo(org: string, repo: string, bookmark?: string) {
       state.codeOrg = org
       state.codeRepo = repo
       // No explicit bookmark: pick the repo's conventional default instead
       // of a hardcoded "main" (build/* repos only carry dev/master and would
       // otherwise render an empty tree with 404 reads).
-      state.codeBranch = branch || defaultBranchOf(org, repo)
+      state.codeBookmark = bookmark || defaultBookmarkOf(org, repo)
       state.selectedFilePath = null
       state.fileContent = ''
       state.showFileHistory = false
@@ -383,7 +383,7 @@ export function createStore(initTheme?: string): Store {
         state.codeOrg,
         state.codeRepo,
         p,
-        state.codeBranch || undefined,
+        state.codeBookmark || undefined,
       )
       state.fileContent = r.isOk() ? r.value : ''
     },
@@ -445,7 +445,7 @@ export function createStore(initTheme?: string): Store {
         state.codeOrg,
         state.codeRepo,
         state.selectedFilePath,
-        state.codeBranch || undefined,
+        state.codeBookmark || undefined,
       )
       state.fileHistory = r.isOk() ? r.value : []
       state.fileHistoryLoading = false
@@ -454,10 +454,10 @@ export function createStore(initTheme?: string): Store {
       state.activeDiffChangeId = changeId
       await loadFileDiff(changeId)
     },
-    async forkSession(branch: string): Promise<boolean> {
+    async forkSession(bookmark: string): Promise<boolean> {
       const id = state.forkTargetId
       if (!id) return false
-      const r = await api.sessions.fork(id, branch)
+      const r = await api.sessions.fork(id, bookmark)
       if (r.isErr()) return false
       state.activeSessionId = r.value.id
       await refreshSessions()

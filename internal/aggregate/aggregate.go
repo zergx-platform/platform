@@ -71,10 +71,10 @@ func Router(a *API) http.Handler {
 	r.Get("/repos/{org}/{repo}/releases/{tag}", a.jjJSON)
 	r.Get("/repos/{org}/{repo}/releases/{tag}/assets/{name}", a.jjStream)
 	r.Get("/repos/{org}/{repo}/tags", a.jjJSON)
-	r.Get("/repos/{org}/{repo}/branches", a.jjJSON)
+	r.Get("/repos/{org}/{repo}/bookmarks", a.jjJSON)
 	r.Get("/repos/{org}/{repo}/archive/tarball/{sha}", a.jjStream)
 	// jjlab git-mirror sync: pull/push remote are POST; the request body
-	// (url/remote/branch/secret) must be forwarded verbatim, so route them
+	// (url/remote/bookmark/secret) must be forwarded verbatim, so route them
 	// through a JSON-body pass-through rather than the GET-only jjJSON.
 	r.Post("/repos/{org}/{repo}/pull-mirror", a.jjSync)
 	r.Post("/repos/{org}/{repo}/push-mirror", a.jjSync)
@@ -152,7 +152,7 @@ func (a *API) deleteMirror(w http.ResponseWriter, r *http.Request) {
 }
 
 // jjSync passes a POST straight through to jjlab (pull/push mirror). The body
-// is forwarded verbatim so url/remote/branch/secret reach jjlab untouched.
+// is forwarded verbatim so url/remote/bookmark/secret reach jjlab untouched.
 // The upstream client carries the jjlab static token, so mirror auth works.
 func (a *API) jjSync(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
@@ -210,7 +210,7 @@ func (a *API) jjSync(w http.ResponseWriter, r *http.Request) {
 }
 
 // jjJSON passes a GET straight through to jjlab and relays the JSON body
-// verbatim (releases / tags / branches …). The request path is forwarded
+// verbatim (releases / tags / bookmarks …). The request path is forwarded
 // as-is under /api/v1.
 func (a *API) jjJSON(w http.ResponseWriter, r *http.Request) {
 	resp, err := a.Up.Repo.Do(r.Context(), http.MethodGet, r.URL.Path, r.URL.Query())
@@ -426,7 +426,7 @@ func badGateway(w http.ResponseWriter, what string, err error) {
 
 // parseTriple splits an org:repo:bookmark session name; ok=false when the
 // name is not workspace-derived.
-func parseTriple(name string) (org, repo, branch string, ok bool) {
+func parseTriple(name string) (org, repo, bookmark string, ok bool) {
 	parts := strings.Split(name, ":")
 	if len(parts) != 3 {
 		return "", "", "", false
@@ -468,7 +468,7 @@ func qOpt(kv ...string) url.Values {
 }
 
 // recSession maps an agent session row into the UI Session shape, filling
-// org/repo/branch from the name convention. All agent-owned fields pass
+// org/repo/bookmark from the name convention. All agent-owned fields pass
 // through verbatim (the agent is the source of truth); the platform only adds
 // the workspace naming split and the legacy-null cursor/worker placeholders the
 // UI still reads.
@@ -484,12 +484,12 @@ func recSession(m map[string]interface{}) map[string]interface{} {
 		return 0
 	}
 	name, _ := m["name"].(string)
-	org, repo, branch, _ := parseTriple(name)
+	org, repo, bookmark, _ := parseTriple(name)
 	return map[string]interface{}{
 		"id":                 name,
 		"org":                org,
 		"repo":               repo,
-		"branch":             branch,
+		"bookmark":           bookmark,
 		"model":              str("model"),
 		"preset":             str("preset"),
 		"tip_id":             m["tip_id"],
@@ -508,7 +508,7 @@ func recSession(m map[string]interface{}) map[string]interface{} {
 
 // ---- GET /repos: merge repo-extension tree (bookmarks + session binding)
 // with agent sessions (model/preset). repo-extension already fans out the new
-// jjlab directory (`GET /repos` + per-repo `GET /branches`), so the platform
+// jjlab directory (`GET /repos` + per-repo `GET /bookmarks`), so the platform
 // no longer re-walks the jj tree itself.
 
 // repoExtTree is repo-extension's GET /repos shape: org → repo → bookmarks
@@ -519,7 +519,7 @@ type repoExtTree struct {
 		Repos []struct {
 			Repo      string `json:"repo"`
 			Bookmarks []struct {
-				Branch      string      `json:"branch"`
+				Bookmark    string      `json:"bookmark"`
 				SessionName interface{} `json:"session_name"`
 			} `json:"bookmarks"`
 		} `json:"repos"`
@@ -558,7 +558,7 @@ func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 						s := recSession(row)
 						sess = map[string]interface{}{
 							"session_id":    sn,
-							"branch":        bm.Branch,
+							"bookmark":      bm.Bookmark,
 							"message_count": 0,
 							"model":         s["model"],
 							"preset":        s["preset"],
@@ -569,8 +569,8 @@ func (a *API) listRepos(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				bms = append(bms, map[string]interface{}{
-					"branch":  bm.Branch,
-					"session": sess,
+					"bookmark": bm.Bookmark,
+					"session":  sess,
 				})
 			}
 			repos = append(repos, map[string]interface{}{"repo": rp.Repo, "bookmarks": bms})
@@ -653,27 +653,27 @@ func mergeSessionState(row map[string]interface{}, ss sessionstate.Session) {
 
 func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Org    string `json:"org"`
-		Repo   string `json:"repo"`
-		Branch string `json:"branch"`
-		Model  string `json:"model"`
-		Preset string `json:"preset"`
+		Org      string `json:"org"`
+		Repo     string `json:"repo"`
+		Bookmark string `json:"bookmark"`
+		Model    string `json:"model"`
+		Preset   string `json:"preset"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if b.Org == "" || b.Repo == "" || b.Branch == "" {
-		writeErr(w, http.StatusBadRequest, "org/repo/branch required")
+	if b.Org == "" || b.Repo == "" || b.Bookmark == "" {
+		writeErr(w, http.StatusBadRequest, "org/repo/bookmark required")
 		return
 	}
 	if bad, ok := naming.Require(
-		[2]string{"org", b.Org}, [2]string{"repo", b.Repo}, [2]string{"branch", b.Branch},
+		[2]string{"org", b.Org}, [2]string{"repo", b.Repo}, [2]string{"bookmark", b.Bookmark},
 	); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
-	name := b.Org + ":" + b.Repo + ":" + b.Branch
+	name := b.Org + ":" + b.Repo + ":" + b.Bookmark
 	body := map[string]interface{}{"name": name}
 	if b.Model != "" {
 		body["model"] = b.Model
@@ -694,22 +694,22 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 func (a *API) forkSession(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
 	var b struct {
-		Branch string `json:"branch"`
+		Bookmark string `json:"bookmark"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Branch == "" {
-		writeErr(w, http.StatusBadRequest, "branch required")
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || b.Bookmark == "" {
+		writeErr(w, http.StatusBadRequest, "bookmark required")
 		return
 	}
-	if bad, ok := naming.Require([2]string{"branch", b.Branch}); !ok {
+	if bad, ok := naming.Require([2]string{"bookmark", b.Bookmark}); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
 	org, repo, _, ok := parseTriple(id)
 	if !ok {
-		writeErr(w, http.StatusBadRequest, "session name is not org:repo:bookmark — cannot fork into a workspace branch")
+		writeErr(w, http.StatusBadRequest, "session name is not org:repo:bookmark — cannot fork into a workspace bookmark")
 		return
 	}
-	name := org + ":" + repo + ":" + b.Branch
+	name := org + ":" + repo + ":" + b.Bookmark
 	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, sessPath(id, "/fork"), map[string]interface{}{"name": name}, nil, nil); err != nil {
 		badGateway(w, "agent", err)
 		return
@@ -731,7 +731,7 @@ func (a *API) compactSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // sessionSettings forwards PATCH /sessions/{id}/settings to the agent and
-// wraps the returned session in the zergx UI shape (org/repo/branch split
+// wraps the returned session in the zergx UI shape (org/repo/bookmark split
 // from the session name).
 func (a *API) sessionSettings(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "id")
@@ -1009,46 +1009,46 @@ func (a *API) sessionTodos(w http.ResponseWriter, r *http.Request) {
 
 // ---- fs: jj tree/contents adapted to the zergx fs contract ----
 
-// defaultBranchCache maps org/repo -> resolved default bookmark.
+// defaultBookmarkCache maps org/repo -> resolved default bookmark.
 var (
 	dbMu    sync.Mutex
 	dbCache = map[string]dbEntry{}
 )
 
 type dbEntry struct {
-	branch  string
-	expires time.Time
+	bookmark string
+	expires  time.Time
 }
 
-// resolveBranch returns the given branch, or the repo's conventional default
-// bookmark when empty. The new jjlab has no bookmarks in its `GET /repos`
-// directory, so resolve via `GET /repos/{org}/{repo}/branches` (each branch
-// carries name+sha) and pick main/master/dev/first.
-func (a *API) resolveBranch(ctx context.Context, org, repo, branch string) string {
-	if branch != "" {
-		return branch
+// resolveBookmark returns the given bookmark, or the repo's conventional
+// default bookmark when empty. jjlab's `GET /repos` directory has no bookmarks,
+// so resolve via `GET /repos/{org}/{repo}/bookmarks` (each bookmark carries
+// name+sha) and pick main/master/dev/first.
+func (a *API) resolveBookmark(ctx context.Context, org, repo, bookmark string) string {
+	if bookmark != "" {
+		return bookmark
 	}
 	key := org + "/" + repo
 	dbMu.Lock()
 	if e, ok := dbCache[key]; ok && time.Now().Before(e.expires) {
 		dbMu.Unlock()
-		return e.branch
+		return e.bookmark
 	}
 	dbMu.Unlock()
 
-	var branches struct {
-		Branches []struct {
+	var bms struct {
+		Bookmarks []struct {
 			Name string `json:"name"`
 			Sha  string `json:"sha"`
-		} `json:"branches"`
+		} `json:"bookmarks"`
 	}
 	out := ""
 	if err := a.Up.Repo.JSON(ctx, http.MethodGet,
-		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/branches",
-		nil, nil, &branches); err == nil {
+		"/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/bookmarks",
+		nil, nil, &bms); err == nil {
 		names := map[string]bool{}
 		var first string
-		for _, b := range branches.Branches {
+		for _, b := range bms.Bookmarks {
 			if first == "" {
 				first = b.Name
 			}
@@ -1065,56 +1065,45 @@ func (a *API) resolveBranch(ctx context.Context, org, repo, branch string) strin
 		}
 	}
 	dbMu.Lock()
-	dbCache[key] = dbEntry{branch: out, expires: time.Now().Add(30 * time.Second)}
+	dbCache[key] = dbEntry{bookmark: out, expires: time.Now().Add(30 * time.Second)}
 	dbMu.Unlock()
 	return out
 }
 
 func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	org, repo, branch, path := q.Get("org"), q.Get("repo"), q.Get("branch"), q.Get("path")
+	org, repo, bookmark, path := q.Get("org"), q.Get("repo"), q.Get("bookmark"), q.Get("path")
 	if org == "" || repo == "" {
 		writeErr(w, http.StatusBadRequest, "org/repo required")
 		return
 	}
-	branch = a.resolveBranch(r.Context(), org, repo, branch)
-	// New jjlab `GET /repos/{org}/{repo}/tree/{sha}` lists the whole tree
-	// (kind "tree"/"file"); the sha may be empty (default) or a branch name
-	// (resolve_snapshot resolves tags/bookmarks/sha). Use the branch name as
-	// the rev.
-	var tree struct {
-		Tree []struct {
+	bookmark = a.resolveBookmark(r.Context(), org, repo, bookmark)
+	prefix := strings.Trim(path, "/")
+	// jjlab `GET /repos/{org}/{repo}/contents/{dir}?ref=` lists the direct
+	// children of a directory (Gitea contents semantics: {type:"tree"/"file"}).
+	// Root: `/contents?ref=`. The ref may be an empty (default) or a
+	// bookmark/tag name (resolve_snapshot resolves it).
+	var epr struct {
+		Entries []struct {
+			Name string `json:"name"`
 			Path string `json:"path"`
-			Kind string `json:"kind"`
-			Size int64  `json:"size"`
-		} `json:"tree"`
+			Type string `json:"type"`
+		} `json:"entries"`
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, "/api/v1/repos/"+url.PathEscape(org)+"/"+url.PathEscape(repo)+"/tree/"+url.PathEscape(branch), nil, nil, &tree); err != nil {
+	epath := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/contents"
+	if prefix != "" {
+		epath += "/" + prefix
+	}
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, epath, nil, upstream.Q("ref", bookmark), &epr); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
-	prefix := strings.Trim(path, "/")
 	entries := []map[string]interface{}{}
-	seen := map[string]bool{}
-	for _, e := range tree.Tree {
-		p := e.Path
-		if prefix != "" {
-			if !strings.HasPrefix(p, prefix+"/") {
-				continue
-			}
-			p = strings.TrimPrefix(p, prefix+"/")
+	for _, e := range epr.Entries {
+		name := e.Name
+		if name == "" {
+			name = e.Path
 		}
-		name := p
-		isDir := e.Kind == "tree"
-		if idx := strings.IndexByte(p, '/'); idx >= 0 {
-			name = p[:idx]
-			isDir = true
-		}
-		key := name + "\x00" + map[bool]string{true: "d", false: "f"}[isDir]
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
 		full := name
 		if prefix != "" {
 			full = prefix + "/" + name
@@ -1122,8 +1111,8 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, map[string]interface{}{
 			"name":   name,
 			"path":   full,
-			"is_dir": isDir,
-			"size":   e.Size,
+			"is_dir": e.Type == "tree",
+			"size":   int64(0),
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -1141,12 +1130,12 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	org, repo, branch, path := q.Get("org"), q.Get("repo"), q.Get("branch"), q.Get("path")
+	org, repo, bookmark, path := q.Get("org"), q.Get("repo"), q.Get("bookmark"), q.Get("path")
 	if org == "" || repo == "" || path == "" {
 		writeErr(w, http.StatusBadRequest, "org/repo/path required")
 		return
 	}
-	branch = a.resolveBranch(r.Context(), org, repo, branch)
+	bookmark = a.resolveBookmark(r.Context(), org, repo, bookmark)
 	// New jjlab `GET /repos/{org}/{repo}/contents/{path}?ref=` returns a
 	// Gitea-style entry (base64 content) at a snapshot rev (bookmark/sha).
 	var res struct {
@@ -1154,7 +1143,7 @@ func (a *API) fsRead(w http.ResponseWriter, r *http.Request) {
 		Encoding string `json:"encoding"`
 	}
 	pth := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/contents/" + path
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, pth, nil, upstream.Q("ref", branch), &res); err != nil {
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, pth, nil, upstream.Q("ref", bookmark), &res); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
@@ -1211,11 +1200,11 @@ func (a *API) ensureRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// New jjlab: POST /repos/{org}/{repo} creates the repo (201) with
-	// default_branch; a 409 already-exists is treated as success (idempotent
+	// default_bookmark; a 409 already-exists is treated as success (idempotent
 	// ensure). The org materializes implicitly.
 	status, data, err := a.Up.Repo.Raw(r.Context(), http.MethodPost,
 		"/api/v1/repos/"+url.PathEscape(b.Org)+"/"+url.PathEscape(b.Repo),
-		map[string]interface{}{"default_branch": "main"}, nil)
+		map[string]interface{}{"default_bookmark": "main"}, nil)
 	if err != nil {
 		badGateway(w, "jjlab", err)
 		return
@@ -1258,48 +1247,48 @@ func (a *API) cloneRepo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "session_id": name})
 }
 
-// forkRepo: same-repo branch fork (source branch → target branch), workspace
+// forkRepo: same-repo bookmark fork (source bookmark → target bookmark), workspace
 // session created eagerly. Cross-repo forks are not supported by jj
 // POST /repos/{org}/{repo}/bookmarks; rejected with a clear error.
 func (a *API) forkRepo(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		SourceOrg    string `json:"source_org"`
-		SourceRepo   string `json:"source_repo"`
-		SourceBranch string `json:"source_branch"`
-		TargetOrg    string `json:"target_org"`
-		TargetRepo   string `json:"target_repo"`
-		TargetBranch string `json:"target_branch"`
+		SourceOrg      string `json:"source_org"`
+		SourceRepo     string `json:"source_repo"`
+		SourceBookmark string `json:"source_bookmark"`
+		TargetOrg      string `json:"target_org"`
+		TargetRepo     string `json:"target_repo"`
+		TargetBookmark string `json:"target_bookmark"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if b.SourceBranch == "" {
-		b.SourceBranch = "main"
+	if b.SourceBookmark == "" {
+		b.SourceBookmark = "main"
 	}
-	if b.TargetBranch == "" {
-		b.TargetBranch = b.SourceBranch
+	if b.TargetBookmark == "" {
+		b.TargetBookmark = b.SourceBookmark
 	}
 	if bad, ok := naming.Require(
 		[2]string{"source_org", b.SourceOrg}, [2]string{"source_repo", b.SourceRepo},
 		[2]string{"target_org", b.TargetOrg}, [2]string{"target_repo", b.TargetRepo},
-		[2]string{"source_branch", b.SourceBranch}, [2]string{"target_branch", b.TargetBranch},
+		[2]string{"source_bookmark", b.SourceBookmark}, [2]string{"target_bookmark", b.TargetBookmark},
 	); !ok {
 		writeErr(w, http.StatusBadRequest, "invalid "+bad+" name: must match [A-Za-z0-9][A-Za-z0-9._-]{0,127} without ':'/'..'/trailing '.'/'.lock'")
 		return
 	}
 	if b.SourceOrg != b.TargetOrg || b.SourceRepo != b.TargetRepo {
-		writeErr(w, http.StatusBadRequest, "cross-repo fork is not supported; fork within the same repo (branch-level)")
+		writeErr(w, http.StatusBadRequest, "cross-repo fork is not supported; fork within the same repo (bookmark-level)")
 		return
 	}
 	body := map[string]interface{}{
-		"target": b.SourceBranch,
+		"target": b.SourceBookmark,
 	}
-	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/"+url.PathEscape(b.SourceOrg)+"/"+url.PathEscape(b.SourceRepo)+"/branches/"+url.PathEscape(b.TargetBranch), body, nil, nil); err != nil {
+	if err := a.Up.Repo.JSON(r.Context(), http.MethodPost, "/api/v1/repos/"+url.PathEscape(b.SourceOrg)+"/"+url.PathEscape(b.SourceRepo)+"/bookmarks/"+url.PathEscape(b.TargetBookmark), body, nil, nil); err != nil {
 		badGateway(w, "jjlab", err)
 		return
 	}
-	name := b.TargetOrg + ":" + b.TargetRepo + ":" + b.TargetBranch
+	name := b.TargetOrg + ":" + b.TargetRepo + ":" + b.TargetBookmark
 	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, "/api/v1/sessions", map[string]interface{}{"name": name}, nil, nil); err != nil {
 		badGateway(w, "agent", err)
 		return
@@ -1314,8 +1303,8 @@ func (a *API) deleteBookmark(w http.ResponseWriter, r *http.Request) {
 	repo := pathParam(r, "repo")
 	bookmark := pathParam(r, "bookmark")
 
-	// 1. Delete the branch in jjlab (DELETE /repos/{org}/{repo}/branches/{name}).
-	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/branches/" + url.PathEscape(bookmark)
+	// 1. Delete the bookmark in jjlab (DELETE /repos/{org}/{repo}/bookmarks/{name}).
+	path := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/bookmarks/" + url.PathEscape(bookmark)
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodDelete, path, nil, nil, nil); err != nil {
 		badGateway(w, "jjlab", err)
 		return

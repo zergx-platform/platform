@@ -70,7 +70,7 @@ async function loadBlame() {
     const r = await api.repos.blame(
       store.codeOrg,
       store.codeRepo,
-      store.codeBranch || 'main',
+      store.codeBookmark || 'main',
       store.selectedFilePath,
     )
     blame = r.isOk() ? r.value : []
@@ -104,14 +104,14 @@ function showTree() {
                                 <FolderGit class="size-3 shrink-0 text-blue-400" />
                                 {repoNode.repo}
                             </div>
-                            {#each repoNode.bookmarks as bm (bm.branch)}
+                            {#each repoNode.bookmarks as bm (bm.bookmark)}
                                 <button
                                     class="flex w-full cursor-pointer items-center gap-2 pl-8 pr-3 py-1 text-xs hover:bg-accent/60 transition-colors
-                                        {store.codeOrg === orgNode.org && store.codeRepo === repoNode.repo && store.codeBranch === bm.branch ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}"
-                                    onclick={() => { store.openRepo(orgNode.org, repoNode.repo, bm.branch) }}
+                                        {store.codeOrg === orgNode.org && store.codeRepo === repoNode.repo && store.codeBookmark === bm.bookmark ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}"
+                                    onclick={() => { store.openRepo(orgNode.org, repoNode.repo, bm.bookmark) }}
                                 >
                                     <GitBranch class="size-3 shrink-0" />
-                                    <span class="truncate">{bm.branch}</span>
+                                    <span class="truncate">{bm.bookmark}</span>
                                 </button>
                             {/each}
                         </div>
@@ -131,8 +131,8 @@ function showTree() {
             <span class="text-xs font-semibold truncate">
                 {store.codeRepo ? `${store.codeOrg}/${store.codeRepo}` : "Files"}
             </span>
-            {#if store.codeBranch}
-                <span class="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-mono">{store.codeBranch}</span>
+            {#if store.codeBookmark}
+                <span class="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-mono">{store.codeBookmark}</span>
             {/if}
             {#if store.codeRepo}
                 <div class="flex-1"></div>
@@ -257,7 +257,7 @@ function showTree() {
             {/if}
         {:else}
             <div class="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                {#if store.codeRepo}{#if store.codeLoading}Loading...{:else}Select a file to view{/if}{:else}Select a branch to browse files{/if}
+                {#if store.codeRepo}{#if store.codeLoading}Loading...{:else}Select a file to view{/if}{:else}Select a bookmark to browse files{/if}
             </div>
         {/if}
     </div>
@@ -289,14 +289,14 @@ function showTree() {
                 </Button>
             {/if}
         {:else if store.codeRepo}
-            <Button variant="ghost" size="icon" class="size-7" onclick={() => { store.codeRepo = ""; store.codeBranch = "" }}>
+            <Button variant="ghost" size="icon" class="size-7" onclick={() => { store.codeRepo = ""; store.codeBookmark = "" }}>
                 <ArrowLeft class="size-4" />
             </Button>
             <span class="text-xs font-medium truncate">
                 {store.codeOrg}/{store.codeRepo}
             </span>
-            {#if store.codeBranch}
-                <span class="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-mono">{store.codeBranch}</span>
+            {#if store.codeBookmark}
+                <span class="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-mono">{store.codeBookmark}</span>
             {/if}
         {:else}
             <span class="text-sm font-semibold">Code</span>
@@ -346,13 +346,13 @@ function showTree() {
                             <FolderGit class="size-3.5 shrink-0 text-blue-400" />
                             {repoNode.repo}
                         </div>
-                        {#each repoNode.bookmarks as bm (bm.branch)}
+                        {#each repoNode.bookmarks as bm (bm.bookmark)}
                             <button
                                 class="flex w-full cursor-pointer items-center gap-3 pl-10 pr-4 py-2.5 text-sm hover:bg-accent border-b border-border/30"
-                                onclick={() => store.openRepo(orgNode.org, repoNode.repo, bm.branch)}
+                                onclick={() => store.openRepo(orgNode.org, repoNode.repo, bm.bookmark)}
                             >
                                 <GitBranch class="size-4 text-muted-foreground shrink-0" />
-                                <span>{bm.branch}</span>
+                                <span>{bm.bookmark}</span>
                             </button>
                         {/each}
                     {/each}

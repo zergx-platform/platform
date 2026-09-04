@@ -9,7 +9,7 @@ export const ContainerInfoSchema = z.object({
   session_id: z.string().nullable(),
   org: z.string().nullable(),
   repo: z.string().nullable(),
-  branch: z.string().nullable(),
+  bookmark: z.string().nullable(),
   status: z.string(),
   created_at: z.string().nullable(),
   kind: z.enum(['worker', 'deploy']).default('worker'),

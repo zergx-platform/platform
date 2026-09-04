@@ -60,7 +60,7 @@ export const sessions = {
 	create: (params: {
 		org?: string;
 		repo?: string;
-		branch?: string;
+		bookmark?: string;
 		model?: string;
 		preset?: string;
 	}) =>
@@ -112,10 +112,10 @@ export const sessions = {
 			undefined,
 			z.object({ ok: z.boolean() }),
 		),
-	fork: (id: string, branch: string) =>
+	fork: (id: string, bookmark: string) =>
 		post(
 			`/api/v1/sessions/${encodeURIComponent(id)}/fork`,
-			{ branch },
+			{ bookmark },
 			z.object({ session: SessionSchema }),
 		).map((r) => r.session),
 	revert: (id: string, messageId?: string) =>

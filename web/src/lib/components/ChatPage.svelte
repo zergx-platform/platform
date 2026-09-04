@@ -188,9 +188,9 @@ $effect(() => {
 		if (
 			store.codeOrg !== s.org ||
 			store.codeRepo !== s.repo ||
-			store.codeBranch !== s.branch
+			store.codeBookmark !== s.bookmark
 		) {
-			void store.openRepo(s.org, s.repo, s.branch);
+			void store.openRepo(s.org, s.repo, s.bookmark);
 		}
 	}
 });
@@ -207,7 +207,7 @@ $effect(() => {
 const sessionWorkerId = $derived.by(() => {
 	const s = store.activeSession;
 	if (!s) return null;
-	return `${s.org}:${s.repo}:${s.branch}`;
+	return `${s.org}:${s.repo}:${s.bookmark}`;
 });
 
 // auto-scroll on new content
@@ -348,7 +348,7 @@ async function loadContainer(sid: string) {
 		return;
 	}
 	// Session name is org:repo:bookmark; the sandbox pod is keyed by it.
-	const sessionName = `${s.org}:${s.repo}:${s.branch}`;
+	const sessionName = `${s.org}:${s.repo}:${s.bookmark}`;
 	const r = await api.containers.list();
 	if (r.isOk()) {
 		const sb = r.value.find((c) => c.session === sessionName);
@@ -362,7 +362,7 @@ async function loadContainer(sid: string) {
 					session_id: sb.session,
 					org: s.org,
 					repo: s.repo,
-					branch: s.branch,
+					bookmark: s.bookmark,
 					status: sb.status,
 					created_at: null,
 					kind: "worker",
@@ -380,7 +380,7 @@ async function createBoundContainer() {
 	containerLoading = true;
 	// Sandboxes are created lazily by the first sandbox tool call; a no-op exec
 	// through the platform warms it up on demand.
-	await api.containers.exec(`${s.org}:${s.repo}:${s.branch}`, "true");
+	await api.containers.exec(`${s.org}:${s.repo}:${s.bookmark}`, "true");
 	await loadContainer(store.activeSessionId);
 	containerLoading = false;
 }
@@ -390,7 +390,7 @@ function jumpToFile(path: string) {
 	if (!s) return;
 	// Open the file inside the chat right panel (files overlay), never leaving
 	// the chat view.
-	void store.openRepo(s.org, s.repo, s.branch).then(() => {
+	void store.openRepo(s.org, s.repo, s.bookmark).then(() => {
 		void store.openFileOverlay(path);
 	});
 }

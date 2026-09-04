@@ -17,19 +17,19 @@ export const repos = {
       `/api/v1/repos`,
       z.object({ orgs: z.array(OrgNodeSchema) }),
     ).map(r => r.orgs),
-  listFiles: (org: string, repo: string, dir = '', branch?: string) => {
+  listFiles: (org: string, repo: string, dir = '', bookmark?: string) => {
     const query: Record<string, string> = { org, repo, path: dir, depth: '1' }
-    if (branch) query.branch = branch
+    if (bookmark) query.bookmark = bookmark
     return get(
-      `/api/v1/fs/list${qs({ org, repo, path: dir, branch })}`,
+      `/api/v1/fs/list${qs({ org, repo, path: dir, bookmark })}`,
       z.object({ entries: z.array(FileEntrySchema) }),
     ).map(r => r.entries)
   },
-  readFile: (org: string, repo: string, filePath: string, branch?: string) => {
+  readFile: (org: string, repo: string, filePath: string, bookmark?: string) => {
     const query: Record<string, string> = { org, repo, path: filePath }
-    if (branch) query.branch = branch
+    if (bookmark) query.bookmark = bookmark
     return get(
-      `/api/v1/fs/read${qs({ org, repo, path: filePath, branch })}`,
+      `/api/v1/fs/read${qs({ org, repo, path: filePath, bookmark })}`,
       z.object({ content: z.string() }),
     ).map(r => r.content)
   },
@@ -41,10 +41,10 @@ export const repos = {
   forkRepo: (params: {
     source_org: string
     source_repo: string
-    source_branch: string
+    source_bookmark: string
     target_org: string
     target_repo: string
-    target_branch?: string
+    target_bookmark?: string
   }) =>
     post(
       `/api/v1/repos/fork`,
@@ -100,11 +100,11 @@ export const repos = {
     org: string,
     repo: string,
     filePath: string,
-    branch?: string,
+    bookmark?: string,
     limit?: number,
   ) => {
     const query: Record<string, string | number> = { path: filePath }
-    if (branch) query.branch = branch
+    if (bookmark) query.bookmark = bookmark
     if (limit) query.limit = limit
     return get(
       `/api/v1/repos/${org}/${repo}/file-log${qs(query)}`,

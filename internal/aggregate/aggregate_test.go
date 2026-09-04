@@ -58,18 +58,22 @@ func newFakeBackends() *fakeBackends {
 	mux.HandleFunc("/api/v1/repos", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"orgs":[{"org":"acme","repos":[{"repo":"api"}]}]}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/branches", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"branches":[{"name":"main","sha":"s1"},{"name":"dev","sha":"s2"}]}`))
+	mux.HandleFunc("/api/v1/repos/acme/api/bookmarks", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"bookmarks":[{"name":"main","sha":"s1"},{"name":"dev","sha":"s2"}]}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/branches/dev2", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/repos/acme/api/bookmarks/dev2", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"name":"dev2","sha":"s3"}`))
 	})
-	mux.HandleFunc("/api/v1/repos/acme/api/tree/main", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"tree":[
-			{"path":"README.md","kind":"file","size":10},
-			{"path":"src","kind":"tree","size":0},
-			{"path":"src/main.go","kind":"file","size":100},
-			{"path":"src/util.go","kind":"file","size":50}
+	mux.HandleFunc("/api/v1/repos/acme/api/contents/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"entries":[
+			{"name":"main.go","path":"main.go","type":"file","mode":"100644","size":100},
+			{"name":"util.go","path":"util.go","type":"file","mode":"100644","size":50}
+		]}`))
+	})
+	mux.HandleFunc("/api/v1/repos/acme/api/contents", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"entries":[
+			{"name":"README.md","path":"README.md","type":"file","mode":"100644","size":10},
+			{"name":"src","path":"src","type":"tree","mode":"040000"}
 		]}`))
 	})
 	mux.HandleFunc("/api/v1/repos/acme/api/contents/hello.txt", func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +94,7 @@ func newFakeBackends() *fakeBackends {
 
 	mux = http.NewServeMux()
 	mux.HandleFunc("/api/v1/repos", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"orgs":[{"org":"acme","repos":[{"repo":"api","managed":true,"bookmarks":[{"branch":"main","session_name":"acme:api:main"},{"branch":"dev","session_name":null}]}]}]}`))
+		_, _ = w.Write([]byte(`{"orgs":[{"org":"acme","repos":[{"repo":"api","managed":true,"bookmarks":[{"bookmark":"main","session_name":"acme:api:main"},{"bookmark":"dev","session_name":null}]}]}]}`))
 	})
 	mux.HandleFunc("/api/v1/session-map", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("session") == "acme:api:main" {
@@ -191,8 +195,8 @@ func TestListReposMergesJJRepoExtAgent(t *testing.T) {
 		t.Fatalf("bookmarks=%d", len(bms))
 	}
 	main := bms[0].(map[string]interface{})
-	if main["branch"] != "main" {
-		t.Fatalf("branch=%v", main["branch"])
+	if main["bookmark"] != "main" {
+		t.Fatalf("bookmark=%v", main["bookmark"])
 	}
 	sess := main["session"].(map[string]interface{})
 	if sess["session_id"] != "acme:api:main" || sess["model"] != "m1" {
@@ -211,11 +215,11 @@ func TestListSessionsParsesNames(t *testing.T) {
 	_, v := do(t, h, "GET", "/sessions", "")
 	sessions := v["sessions"].([]interface{})
 	s0 := sessions[0].(map[string]interface{})
-	if s0["id"] != "acme:api:main" || s0["org"] != "acme" || s0["repo"] != "api" || s0["branch"] != "main" {
-		t.Fatalf("derived=%v %v %v %v", s0["id"], s0["org"], s0["repo"], s0["branch"])
+	if s0["id"] != "acme:api:main" || s0["org"] != "acme" || s0["repo"] != "api" || s0["bookmark"] != "main" {
+		t.Fatalf("derived=%v %v %v %v", s0["id"], s0["org"], s0["repo"], s0["bookmark"])
 	}
 	s1 := sessions[1].(map[string]interface{})
-	if s1["org"] != "" || s1["branch"] != "" {
+	if s1["org"] != "" || s1["bookmark"] != "" {
 		t.Fatalf("non-derived should be empty: %v", s1)
 	}
 }
@@ -225,7 +229,7 @@ func TestCreateSessionDerivesName(t *testing.T) {
 	defer fb.Close()
 	h := fb.api(t)
 
-	code, v := do(t, h, "POST", "/sessions", `{"org":"acme","repo":"api","branch":"feat"}`)
+	code, v := do(t, h, "POST", "/sessions", `{"org":"acme","repo":"api","bookmark":"feat"}`)
 	if code != 200 {
 		t.Fatalf("code=%d %v", code, v)
 	}
@@ -240,7 +244,7 @@ func TestForkSessionRequiresDerivedName(t *testing.T) {
 	defer fb.Close()
 	h := fb.api(t)
 
-	code, _ := do(t, h, "POST", "/sessions/hi/fork", `{"branch":"x"}`)
+	code, _ := do(t, h, "POST", "/sessions/hi/fork", `{"bookmark":"x"}`)
 	if code != 400 {
 		t.Fatalf("non-derived fork should 400, got %d", code)
 	}
@@ -282,7 +286,7 @@ func TestFsListDepthOne(t *testing.T) {
 	defer fb.Close()
 	h := fb.api(t)
 
-	_, v := do(t, h, "GET", "/fs/list?org=acme&repo=api&branch=main&path=&depth=1", "")
+	_, v := do(t, h, "GET", "/fs/list?org=acme&repo=api&bookmark=main&path=&depth=1", "")
 	entries := v["entries"].([]interface{})
 	// root level: README.md + src/ (collapsed dir)
 	if len(entries) != 2 {
@@ -293,7 +297,7 @@ func TestFsListDepthOne(t *testing.T) {
 		t.Fatalf("dir collapse failed: %v", src)
 	}
 
-	_, v = do(t, h, "GET", "/fs/list?org=acme&repo=api&branch=main&path=src&depth=1", "")
+	_, v = do(t, h, "GET", "/fs/list?org=acme&repo=api&bookmark=main&path=src&depth=1", "")
 	entries = v["entries"].([]interface{})
 	if len(entries) != 2 {
 		t.Fatalf("src entries=%v", v)
@@ -305,7 +309,7 @@ func TestFsReadDecodesBase64(t *testing.T) {
 	defer fb.Close()
 	h := fb.api(t)
 
-	_, v := do(t, h, "GET", "/fs/read?org=acme&repo=api&branch=main&path=hello.txt", "")
+	_, v := do(t, h, "GET", "/fs/read?org=acme&repo=api&bookmark=main&path=hello.txt", "")
 	if v["content"] != "hello world" {
 		t.Fatalf("content=%v", v["content"])
 	}
@@ -321,7 +325,7 @@ func TestForkRepoSameRepoOnly(t *testing.T) {
 		t.Fatalf("cross-repo fork should 400, got %d", code)
 	}
 
-	code, v := do(t, h, "POST", "/repos/fork", `{"source_org":"acme","source_repo":"api","source_branch":"main","target_org":"acme","target_repo":"api","target_branch":"dev2"}`)
+	code, v := do(t, h, "POST", "/repos/fork", `{"source_org":"acme","source_repo":"api","source_bookmark":"main","target_org":"acme","target_repo":"api","target_bookmark":"dev2"}`)
 	if code != 200 {
 		t.Fatalf("same-repo fork code=%d %v", code, v)
 	}
@@ -361,16 +365,16 @@ func TestInvalidComponentsRejectedFast(t *testing.T) {
 	cases := []struct {
 		method, path, body string
 	}{
-		{"POST", "/sessions", `{"org":"a:b","repo":"ok","branch":"main"}`},
-		{"POST", "/sessions", `{"org":"ok","repo":"x..y","branch":"main"}`},
-		{"POST", "/sessions", `{"org":"ok","repo":"ok","branch":"-lead"}`},
-		{"POST", "/sessions", `{"org":"ok","repo":"ok","branch":"name.lock"}`},
-		{"POST", "/sessions", `{"org":"ok","repo":"ok","branch":"trailing."}`},
-		{"POST", "/sessions/acme:api:main/fork", `{"branch":"bad:name"}`},
+		{"POST", "/sessions", `{"org":"a:b","repo":"ok","bookmark":"main"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"x..y","bookmark":"main"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"ok","bookmark":"-lead"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"ok","bookmark":"name.lock"}`},
+		{"POST", "/sessions", `{"org":"ok","repo":"ok","bookmark":"trailing."}`},
+		{"POST", "/sessions/acme:api:main/fork", `{"bookmark":"bad:name"}`},
 		{"POST", "/repos/ensure-org", `{"org":"sp ace"}`},
 		{"POST", "/repos/ensure", `{"org":"ok","repo":"a..b"}`},
 		{"POST", "/repos/clone", `{"org":"ok","repo":"中文","git_url":"https://x"}`},
-		{"POST", "/repos/fork", `{"source_org":"ok","source_repo":"a","source_branch":"main","target_org":"ok","target_repo":"a","target_branch":"x:y"}`},
+		{"POST", "/repos/fork", `{"source_org":"ok","source_repo":"a","source_bookmark":"main","target_org":"ok","target_repo":"a","target_bookmark":"x:y"}`},
 	}
 	for i, c := range cases {
 		code, v := do(t, h, c.method, c.path, c.body)
@@ -383,7 +387,7 @@ func TestInvalidComponentsRejectedFast(t *testing.T) {
 	}
 
 	// valid components still pass through
-	code, _ := do(t, h, "POST", "/sessions", `{"org":"acme","repo":"my.repo","branch":"feat-1.2"}`)
+	code, _ := do(t, h, "POST", "/sessions", `{"org":"acme","repo":"my.repo","bookmark":"feat-1.2"}`)
 	if code != 200 {
 		t.Fatalf("valid dotted components should pass, got %d", code)
 	}
@@ -496,7 +500,7 @@ func TestEscapedSessionIDsForwardDecoded(t *testing.T) {
 
 	// fork: parseTriple needs the decoded name; the agent call must carry
 	// the id exactly once.
-	code, _ = do(t, h, "POST", "/sessions/acme%3Aapi%3Amain/fork", `{"branch":"dev2"}`)
+	code, _ = do(t, h, "POST", "/sessions/acme%3Aapi%3Amain/fork", `{"bookmark":"dev2"}`)
 	if code != 200 {
 		t.Fatalf("fork with escaped id code=%d (was always 400 before decode)", code)
 	}
@@ -547,19 +551,19 @@ func TestPackageRoutesAcceptEscapedNames(t *testing.T) {
 	}
 }
 
-// TestFsDefaultsToConventionalBranch pins the empty-branch default: repos
+// TestFsDefaultsToConventionalBookmark pins the empty-bookmark default: repos
 // that only carry dev/master must resolve to a real bookmark instead of the
 // hardcoded "main" (which 404'd every tree/read).
-func TestFsDefaultsToConventionalBranch(t *testing.T) {
+func TestFsDefaultsToConventionalBookmark(t *testing.T) {
 	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/repos/build/svc/branches" {
-			_, _ = w.Write([]byte(`{"branches":[{"name":"master","sha":"s1"},{"name":"dev","sha":"s2"}]}`))
+		if r.URL.Path == "/api/v1/repos/build/svc/bookmarks" {
+			_, _ = w.Write([]byte(`{"bookmarks":[{"name":"master","sha":"s1"},{"name":"dev","sha":"s2"}]}`))
 			return
 		}
-		// Whatever branch the platform asks the tree for, echo it back.
-		if strings.Contains(r.URL.Path, "/tree/") {
-			used := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/build/svc/tree/"), "/")[0]
-			_, _ = w.Write([]byte(`{"tree":[{"path":"go.mod","kind":"file","size":10}]}`))
+		// Whatever bookmark the platform asks the contents for, echo it back.
+		if strings.Contains(r.URL.Path, "/contents") {
+			used := r.URL.Query().Get("ref")
+			_, _ = w.Write([]byte(`{"entries":[{"name":"go.mod","path":"go.mod","type":"file","mode":"100644"}]}`))
 			w.Header().Set("X-Used-Branch", used)
 			return
 		}
@@ -574,10 +578,10 @@ func TestFsDefaultsToConventionalBranch(t *testing.T) {
 	}
 	// The default cache now holds master for build/svc.
 	dbMu.Lock()
-	cached := dbCache["build/svc"].branch
+	cached := dbCache["build/svc"].bookmark
 	dbMu.Unlock()
 	if cached != "master" {
-		t.Fatalf("default branch = %q, want master (main absent, master before dev)", cached)
+		t.Fatalf("default bookmark = %q, want master (main absent, master before dev)", cached)
 	}
 }
 

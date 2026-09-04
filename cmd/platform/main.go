@@ -256,12 +256,12 @@ func ownedByAggregate(path, method string) bool {
 			return method == http.MethodGet || method == http.MethodPut || method == http.MethodDelete
 		}
 	}
-	// GET /api/v1/repos/{org}/{repo}/{releases|tags|branches|archive/…} are
+	// GET /api/v1/repos/{org}/{repo}/{releases|tags|bookmarks|archive/…} are
 	// jjlab pass-throughs owned by the aggregate router.
 	if method == http.MethodGet && strings.HasPrefix(path, "/api/v1/repos/") {
 		rest := strings.TrimPrefix(path, "/api/v1/repos/")
 		for _, suffix := range []string{
-			"/releases", "/tags", "/branches", "/archive/tarball/", "/mirror",
+			"/releases", "/tags", "/bookmarks", "/archive/tarball/", "/mirror",
 		} {
 			if strings.Contains(rest, suffix) {
 				return true

@@ -4,7 +4,7 @@ export const SessionSchema = z.object({
   id: z.string(),
   org: z.string(),
   repo: z.string(),
-  branch: z.string(),
+  bookmark: z.string(),
   model: z.string(),
   preset: z.string(),
   tip_id: z.string().nullable(),
@@ -30,7 +30,7 @@ export type Session = z.infer<typeof SessionSchema>
 
 export const SessionInfoSchema = z.object({
   session_id: z.string(),
-  branch: z.string(),
+  bookmark: z.string(),
   message_count: z.number(),
   unread: z.number().optional(),
   model: z.string(),
@@ -39,7 +39,7 @@ export const SessionInfoSchema = z.object({
 export type SessionInfo = z.infer<typeof SessionInfoSchema>
 
 export const BookmarkNodeSchema = z.object({
-  branch: z.string(),
+  bookmark: z.string(),
   session: SessionInfoSchema.nullable(),
 })
 export type BookmarkNode = z.infer<typeof BookmarkNodeSchema>
