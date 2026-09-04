@@ -91,8 +91,6 @@ export const ToolConfigItemSchema = z.object({
   default: z.unknown().optional(),
   description: z.string().optional(),
   scope: z.enum(['global', 'session']).default('global'),
-  /** When true, tools depending on this config are gated on it being set. */
-  required: z.boolean().optional(),
 })
 export type ToolConfigItem = z.infer<typeof ToolConfigItemSchema>
 
