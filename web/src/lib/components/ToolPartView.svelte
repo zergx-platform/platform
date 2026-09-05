@@ -70,7 +70,7 @@ function inputSummary(t: string, inp: Record<string, unknown>): string {
       return `build ${s(inp.tag)} ← ${s(inp.dockerfile_path)}${s(inp.context) ? ` (ctx ${s(inp.context)})` : ''}`
     case 'package-publish':
       return `publish ${s(inp.protocol)}${s(inp.name) ? ` ${s(inp.name)}` : ''}${s(inp.version) ? `@${s(inp.version)}` : ''}`
-    case 'container-deploy':
+    case 'service-deploy':
       return `deploy ${s(inp.image)}${s(inp.name) ? ` as ${s(inp.name)}` : ''}${inp.port != null ? ` :${inp.port}` : ''}`
     case 'pull-oci-image':
       return `pull image ${s(inp.image)}`

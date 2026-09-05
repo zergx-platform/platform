@@ -645,10 +645,10 @@ func mergeSessionState(row map[string]interface{}, ss sessionstate.Session) {
 	if ss.LastMessagePrev != "" {
 		row["last_message_preview"] = ss.LastMessagePrev
 	}
-	if ss.UnreadCount > 0 {
-		row["unread_count"] = ss.UnreadCount
-		row["unread_calculated"] = ss.UnreadCalculated
-	}
+	// Always write unread_count (including 0) so a freshly-read session clears
+	// the badge instead of the client keeping a stale positive value.
+	row["unread_count"] = ss.UnreadCount
+	row["unread_calculated"] = ss.UnreadCalculated
 }
 
 func (a *API) createSession(w http.ResponseWriter, r *http.Request) {

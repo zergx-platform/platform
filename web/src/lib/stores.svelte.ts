@@ -18,6 +18,9 @@ type StoreState = {
   theme: string
   sessionOverlay: SessionOverlay
   sessions: Session[]
+  /** Last sessions-list load error ('' when healthy). Surfaced as a status
+   * light instead of raw red text on the list. */
+  sessionError: string
   activeSessionId: string | null
   orgs: OrgNode[]
   siderTab: SiderTab
@@ -93,6 +96,7 @@ export function createStore(initTheme?: string): Store {
     theme: initTheme || 'dark',
     sessionOverlay: null,
     sessions: [],
+    sessionError: '',
     activeSessionId: null,
     orgs: [],
     siderTab: 'chat',
@@ -124,7 +128,14 @@ export function createStore(initTheme?: string): Store {
 
   async function refreshSessions() {
     const r = await api.sessions.list()
-    if (r.isOk()) state.sessions = r.value
+    if (r.isOk()) {
+      state.sessions = r.value
+      state.sessionError = ''
+    } else {
+      // Keep the stale list but surface the failure so the UI can show a
+      // connection status instead of a misleading "empty" state.
+      state.sessionError = r.error
+    }
   }
   async function refreshRepos() {
     const r = await api.repos.list()

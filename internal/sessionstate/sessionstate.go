@@ -271,9 +271,12 @@ func (s *Store) Snapshot(names []string) map[string]Session {
 			// Never opened: everything after the (absent) watermark is
 			// unread. Lower bound 1 until refined.
 			unread = 1
-		} else if wm != "" && f.LastMessageAt > wm {
-			// Watermark timestamp ordering: both are `YYYY-MM-DD HH:MM:SS`
-			// strings, lexicographic order == chronological order.
+		}
+		if wm != "" && cmpTime(f.LastMessageAt, wm) > 0 {
+			// Watermark timestamp ordering: both are UTC timestamps; compare
+			// after normalizing to a common `YYYY-MM-DD HH:MM:SS` so historical
+			// (no-tz, space-separated) and new (ISO+Z) values both compare
+			// correctly.
 			unread = 1
 		}
 		if f.unreadExact {
@@ -289,8 +292,52 @@ func (s *Store) Snapshot(names []string) map[string]Session {
 	return out
 }
 
+// nowStr returns an ISO-8601 UTC timestamp matching the agent's
+// `new Date().toISOString()` (`YYYY-MM-DDTHH:MM:SS.sssZ`) so the read
+// watermark stays in the SAME byte format as message `created_at` / the
+// message-fact `last_message_at`. A mixed format (ISO vs
+// 'YYYY-MM-DD HH:MM:SS') would break the string comparison in
+// Snapshot/countUnread and leave stale unread badges.
 func nowStr() string {
-	return time.Now().UTC().Format("2006-01-02 15:04:05")
+	return time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+}
+
+// cmpTime compares two timestamp strings chronologically after normalizing to
+// a common `YYYY-MM-DD HH:MM:SS` prefix. It tolerates the historical
+// `YYYY-MM-DD HH:MM:SS` (UTC, no tz) and the current ISO+Z
+// (`YYYY-MM-DDTHH:MM:SS.sssZ`) forms so unread counts stay correct regardless
+// of when a row was written. Returns -1/0/+1.
+func cmpTime(a, b string) int {
+	na := normalizeTime(a)
+	nb := normalizeTime(b)
+	switch {
+	case na < nb:
+		return -1
+	case na > nb:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// normalizeTime strips fractional seconds and timezone suffix, replacing the
+// ISO 'T' with a space, giving a fixed-length `YYYY-MM-DD HH:MM:SS` string for
+// lexicographic comparison. Empty/invalid input falls back to the raw string.
+func normalizeTime(s string) string {
+	if s == "" {
+		return s
+	}
+	// Reject already-normalized (no timezone noise).
+	// Take the 19-char date-time prefix.
+	if len(s) >= 19 {
+		p := s[:19]
+		p = strings.Replace(p, "T", " ", 1)
+		// Only use the prefix if it looks like a date-time.
+		if len(p) == 19 && p[4] == '-' && p[7] == '-' {
+			return p
+		}
+	}
+	return s
 }
 
 // RefineUnread recomputes exact unread counts for sessions whose badge is
@@ -334,7 +381,7 @@ func (s *Store) unsafeSnapshotOne(name string) (Session, bool) {
 	ss.ReadAt = wm
 	if !hasWM {
 		ss.UnreadCount = 1
-	} else if wm != "" && f.LastMessageAt > wm {
+	} else if wm != "" && cmpTime(f.LastMessageAt, wm) > 0 {
 		ss.UnreadCount = 1
 	}
 	return ss, true
@@ -362,7 +409,7 @@ func (s *Store) countUnread(ctx context.Context, sid, watermark string) (int, bo
 	}
 	n := 0
 	for _, m := range res.Messages {
-		if m.CreatedAt > watermark {
+		if cmpTime(m.CreatedAt, watermark) > 0 {
 			n++
 		}
 	}

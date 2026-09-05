@@ -156,6 +156,15 @@ function deleteOrg(org: string, e: Event) {
             <button class="shrink-0 font-medium" onclick={() => (adoptError = '')}>✕</button>
         </div>
     {/if}
+    <div class="flex items-center justify-between px-2 pt-2">
+        <!-- Connection status light (top-right of the session list): green =
+             healthy, pulsing red = failing. No raw error text on the list. -->
+        <span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Recent</span>
+        <span
+            class="size-2 rounded-full shrink-0 {store.sessionError ? 'bg-red-500 animate-pulse' : 'bg-green-500'}"
+            title={store.sessionError ? `Connection error: ${store.sessionError}` : 'Connected'}
+        ></span>
+    </div>
     <div class="flex-1 overflow-y-auto px-2 py-1">
         <!-- Recent sessions: flat list (org/repo/bookmark), expanded by default -->
         {#if recentSessions.length > 0}
