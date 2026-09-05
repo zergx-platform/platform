@@ -64,16 +64,35 @@ function handleCopy() {
                 {:else if part.type === "tool" && part.state}
                     <ToolPartView {part} {isStreaming} {onOpenChange} />
                 {:else if part.type === "file"}
-                    <a
-                        href={fileUrl(part.code ?? "")}
-                        class="inline-flex items-center gap-2 rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-accent/40 transition-colors"
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        <Paperclip class="size-3.5 shrink-0 text-muted-foreground" />
-                        <span class="truncate font-medium">{part.name || part.code}</span>
-                        {#if part.size}<span class="shrink-0 text-[10px] text-muted-foreground">{formatSize(part.size)}</span>{/if}
-                    </a>
+                    {#if (part.mime ?? "").startsWith("image/")}
+                        <a
+                            href={fileUrl(part.code ?? "")}
+                            target="_blank"
+                            rel="noreferrer"
+                            class="block max-w-[240px] rounded-lg overflow-hidden border border-border bg-muted/40 hover:bg-accent/40 transition-colors"
+                        >
+                            <img
+                                src={fileUrl(part.code ?? "")}
+                                alt={part.name || part.code}
+                                loading="lazy"
+                                class="block w-full h-36 object-cover"
+                            />
+                        </a>
+                        {#if part.size}
+                            <div class="mt-0.5 text-[10px] text-muted-foreground px-0.5">{formatSize(part.size)}</div>
+                        {/if}
+                    {:else}
+                        <a
+                            href={fileUrl(part.code ?? "")}
+                            class="inline-flex items-center gap-2 rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-accent/40 transition-colors"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            <Paperclip class="size-3.5 shrink-0 text-muted-foreground" />
+                            <span class="truncate font-medium">{part.name || part.code}</span>
+                            {#if part.size}<span class="shrink-0 text-[10px] text-muted-foreground">{formatSize(part.size)}</span>{/if}
+                        </a>
+                    {/if}
                 {:else if part.type === "compaction"}
                     <details class="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
                         <summary class="cursor-pointer select-none text-muted-foreground">
