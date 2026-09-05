@@ -504,10 +504,10 @@ export function createMessages(sessionId: () => string) {
 
 	async function send(
 		text: string,
-		attachmentCodes: string[] = [],
+		attachments: Array<{ code: string; name?: string; mime?: string; size?: number }> = [],
 	): Promise<void> {
 		const trimmed = text.trim();
-		if ((!trimmed && attachmentCodes.length === 0) || sending) return;
+		if ((!trimmed && attachments.length === 0) || sending) return;
 		sending = true;
 		// optimistic: clear any stale streaming, add pending user msg + streaming placeholder
 		const optimisticUserSeq = allocSeq();
@@ -534,7 +534,7 @@ export function createMessages(sessionId: () => string) {
 				seq: allocSeq(),
 			},
 		];
-		const r = await api.sessions.prompt(sessionId(), trimmed, attachmentCodes);
+		const r = await api.sessions.prompt(sessionId(), trimmed, attachments);
 		r.match(
 			(data) => {
 				// swap the optimistic pending user message id for the real one

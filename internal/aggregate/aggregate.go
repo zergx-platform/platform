@@ -777,6 +777,9 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 		Prompt      string `json:"prompt"`
 		Attachments []struct {
 			Code string `json:"code"`
+			Name string `json:"name"`
+			Mime string `json:"mime"`
+			Size int64  `json:"size"`
 		} `json:"attachments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
@@ -787,19 +790,31 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "prompt required")
 		return
 	}
-	// Platform-owned: expand each attachment code into a `[附件 …file:code…]`
-	// reference by fetching metadata from the agent file store, then splice
-	// the references ahead of the user's text. The agent is unchanged — it
-	// only ever receives the final {prompt} string.
-	refs, err := a.formatFileRefs(r.Context(), b.Attachments)
-	if err != nil {
-		badGateway(w, "files", err)
-		return
+	// The agent persists attachments as their OWN `file` parts (structured),
+	// so no text padding is needed here. Enrich each code with metadata so
+	// the agent can render it; a missing/errored lookup degrades to the code.
+	atts := make([]map[string]interface{}, 0, len(b.Attachments))
+	for _, att := range b.Attachments {
+		if att.Code == "" {
+			continue
+		}
+		item := map[string]interface{}{"code": att.Code}
+		if att.Name != "" {
+			item["name"] = att.Name
+		}
+		if att.Mime != "" {
+			item["mime"] = att.Mime
+		}
+		if att.Size != 0 {
+			item["size"] = att.Size
+		}
+		atts = append(atts, item)
 	}
-	if len(refs) > 0 {
-		b.Prompt = strings.Join(refs, "\n") + "\n" + b.Prompt
+	body := map[string]interface{}{"prompt": b.Prompt}
+	if len(atts) > 0 {
+		body["attachments"] = atts
 	}
-	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, sessPath(id, "/prompt"), b, nil, nil); err != nil {
+	if err := a.Up.Agent.JSON(r.Context(), http.MethodPost, sessPath(id, "/prompt"), body, nil, nil); err != nil {
 		badGateway(w, "agent", err)
 		return
 	}
@@ -825,45 +840,6 @@ func (a *API) sessionPrompt(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "messageId": messageId})
 }
 
-// formatFileRefs turns attachment codes into `[附件 <name> | file:<code> |
-// <mime> | <sizeB>]` references by querying the agent file store per code.
-// A missing/errored lookup degrades to a bare `file:<code>` so a bad code
-// never blocks the prompt. Returns the ordered reference lines.
-func (a *API) formatFileRefs(ctx context.Context, atts []struct {
-	Code string `json:"code"`
-}) ([]string, error) {
-	out := make([]string, 0, len(atts))
-	for _, att := range atts {
-		if att.Code == "" {
-			continue
-		}
-		var m struct {
-			Meta struct {
-				Name string `json:"name"`
-				Mime string `json:"mime"`
-				Size int64  `json:"size"`
-			} `json:"meta"`
-		}
-		// The agent exposes meta as {meta:{name,mime,size}} (route
-		// /files/{code}/meta). Lookup failure degrades gracefully.
-		_ = a.Up.Files.JSON(ctx, http.MethodGet, "/api/v1/files/"+url.PathEscape(att.Code)+"/meta", nil, nil, &m)
-		if m.Meta.Name == "" && m.Meta.Mime == "" {
-			out = append(out, "[file:"+att.Code+"]")
-			continue
-		}
-		mime := m.Meta.Mime
-		if mime == "" {
-			mime = "application/octet-stream"
-		}
-		name := m.Meta.Name
-		if name == "" {
-			name = att.Code
-		}
-		out = append(out, fmt.Sprintf("[附件 %s | file:%s | %s | %d B]", name, att.Code, mime, m.Meta.Size))
-	}
-	return out, nil
-}
-
 // listMessages adapts agent message rows into the UI Message shape with
 // parts built from role/content/tool_name.
 func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
@@ -882,6 +858,12 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 				Result   string      `json:"result"`
 				Metadata interface{} `json:"metadata"`
 			} `json:"tool_parts"`
+			FileParts []struct {
+				Code string `json:"code"`
+				Name string `json:"name"`
+				Mime string `json:"mime"`
+				Size int64  `json:"size"`
+			} `json:"file_parts"`
 			CreatedAt string `json:"created_at"`
 		} `json:"messages"`
 	}
@@ -892,6 +874,17 @@ func (a *API) listMessages(w http.ResponseWriter, r *http.Request) {
 	out := []map[string]interface{}{}
 	for _, m := range res.Messages {
 		parts := []map[string]interface{}{}
+		// User attachments come first (owned `file` part), then any tool steps
+		// or rendered text.
+		for _, fp := range m.FileParts {
+			parts = append(parts, map[string]interface{}{
+				"type": "file",
+				"code": fp.Code,
+				"name": fp.Name,
+				"mime": fp.Mime,
+				"size": fp.Size,
+			})
+		}
 		if len(m.ToolParts) > 0 {
 			for _, tp := range m.ToolParts {
 				state := map[string]interface{}{

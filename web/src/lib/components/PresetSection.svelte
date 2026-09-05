@@ -42,6 +42,16 @@ function togglePresetEdit(p: PresetInfo) {
 	}
 }
 
+/** Effective locale for localized preset prompts: follow the browser lang. */
+const locale = (navigator.language || "en").toLowerCase().startsWith("zh")
+	? "zh"
+	: "en"
+
+/** The system prompt shown for a preset, localized when available. */
+function localizedPrompt(p: PresetInfo): string {
+	return p.system_prompt_i18n?.[locale] ?? p.system_prompt
+}
+
 async function savePresetEdit() {
   const id = editingId
   if (!id) return
@@ -132,7 +142,7 @@ function toggleTool(tool: string) {
                                 <p class="text-[10px] text-amber-600 dark:text-amber-500">System preset - read only, cannot edit or delete.</p>
                                 <div>
                                     <label class="text-xs font-semibold text-muted-foreground block mb-1">System Prompt</label>
-                                    <pre class="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono whitespace-pre-wrap break-all min-h-[80px] max-h-[260px] overflow-auto">{p.system_prompt}</pre>
+                                    <pre class="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono whitespace-pre-wrap break-all min-h-[80px] max-h-[260px] overflow-auto">{localizedPrompt(p)}</pre>
                                 </div>
                                 <div>
                                     <span class="text-xs font-semibold text-muted-foreground block mb-1">Max Turns</span>

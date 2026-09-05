@@ -67,6 +67,9 @@ export type FileEntry = z.infer<typeof FileEntrySchema>
 export const PresetInfoSchema = z.object({
   id: z.string(),
   system_prompt: z.string(),
+  /** Localized system prompts: { locale: template }. Falls back to
+   * `system_prompt` for an untranslated locale. */
+  system_prompt_i18n: z.record(z.string(), z.string()).optional(),
   tools: z.array(z.string()),
   max_turns: z.number(),
   /** Immutable system preset (cannot be edited/deleted). */

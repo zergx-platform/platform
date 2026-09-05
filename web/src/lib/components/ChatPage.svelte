@@ -482,7 +482,7 @@ async function saveSettings() {
 
 async function send() {
 	const text = input.trim();
-	const atts = pendingFiles.map(f => f.code);
+	const atts = [...pendingFiles];
 	if ((!text && atts.length === 0) || !msgHook || msgHook.sending) return;
 	input = "";
 	pendingFiles = [];

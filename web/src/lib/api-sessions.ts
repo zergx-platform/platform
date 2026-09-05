@@ -73,12 +73,16 @@ export const sessions = {
 			z.object({ session: SessionSchema }),
 		).map((r) => r.session),
 	delete: (id: string) => del(`/api/v1/sessions/${encodeURIComponent(id)}`),
-	prompt: (id: string, prompt: string, attachments?: string[]) =>
+	prompt: (
+		id: string,
+		prompt: string,
+		attachments?: Array<{ code: string; name?: string; mime?: string; size?: number }>,
+	) =>
 		post(
 			`/api/v1/sessions/${encodeURIComponent(id)}/prompt`,
 			{
 				prompt,
-				attachments: (attachments ?? []).map((code) => ({ code })),
+				attachments: attachments ?? [],
 			},
 			z.object({ ok: z.boolean(), messageId: z.string() }),
 		),

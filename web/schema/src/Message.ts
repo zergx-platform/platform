@@ -33,6 +33,11 @@ export const MessagePartSchema = z.object({
   tool_call_id: z.string().optional(),
   state: ToolStateSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  // Attachment (user file) part fields.
+  code: z.string().optional(),
+  name: z.string().optional(),
+  mime: z.string().optional(),
+  size: z.number().optional(),
 })
 export type MessagePart = z.infer<typeof MessagePartSchema>
 

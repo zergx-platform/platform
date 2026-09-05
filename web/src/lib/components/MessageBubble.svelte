@@ -1,5 +1,6 @@
 <script lang="ts">
-import { Check, Copy, Undo2 } from '@lucide/svelte'
+import { Check, Copy, Paperclip, Undo2 } from '@lucide/svelte'
+import { fileUrl } from '$lib/api'
 import type { ChatMessage } from '$lib/hooks/useMessages.svelte'
 import MarkdownRenderer from './Markdown.svelte'
 import ToolPartView from './ToolPartView.svelte'
@@ -18,6 +19,12 @@ let copied = $state(false)
 let isUser = $derived(msg.role === 'user')
 let isError = $derived(msg.role === 'error')
 let isStreaming = $derived(msg.status === 'streaming')
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
 
 function getText() {
   return msg.parts
@@ -56,6 +63,17 @@ function handleCopy() {
                     </details>
                 {:else if part.type === "tool" && part.state}
                     <ToolPartView {part} {isStreaming} {onOpenChange} />
+                {:else if part.type === "file"}
+                    <a
+                        href={fileUrl(part.code ?? "")}
+                        class="inline-flex items-center gap-2 rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs hover:bg-accent/40 transition-colors"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        <Paperclip class="size-3.5 shrink-0 text-muted-foreground" />
+                        <span class="truncate font-medium">{part.name || part.code}</span>
+                        {#if part.size}<span class="shrink-0 text-[10px] text-muted-foreground">{formatSize(part.size)}</span>{/if}
+                    </a>
                 {:else if part.type === "compaction"}
                     <details class="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
                         <summary class="cursor-pointer select-none text-muted-foreground">
