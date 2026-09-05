@@ -44,7 +44,7 @@ function handleCopy() {
         {/if}
 
         {#if isStreaming && msg.parts.length === 0}
-            <div class="text-xs text-muted-foreground italic">thinking...</div>
+            <div class="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-pulse"></div>
         {:else}
             {#each msg.parts as part (part.id)}
                 {#if part.type === "text"}

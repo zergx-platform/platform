@@ -61,6 +61,7 @@ let sessionSettings = $state<{
 }>({});
 
 let msgHook = $state<ReturnType<typeof createMessages> | null>(null);
+let lastSid: string | null = null;
 
 let runStatus = $derived(msgHook?.sending ? "busy" : "idle");
 let initialScrollDone = false;
@@ -116,8 +117,15 @@ $effect(() => {
 	const sid = store.activeSessionId;
 	if (!sid) {
 		msgHook = null;
+		lastSid = null;
 		return;
 	}
+	// Same-session reuse: keep the existing hook (and its long-lived SSE) when
+	// the active session id hasn't actually changed, so a re-render doesn't
+	// tear down and reopen the stream. Only when the id really changes do we
+	// replace the hook.
+	if (msgHook && lastSid === sid) return;
+	lastSid = sid;
 	const hook = createMessages(() => store.activeSessionId ?? sid);
 	// Todos refresh on demand: the memory extension publishes todos-updated
 	// onto the session event stream whenever todowrite lands (no more 5s

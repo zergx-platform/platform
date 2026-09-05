@@ -17,6 +17,15 @@ export function createMessages(sessionId: () => string) {
 
 	let mountId = 0;
 	let eventSource: EventSource | null = null;
+	// Reconnect state (single long-lived SSE per active session, IM-style).
+	let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+	let reconnectAttempt = 0;
+	let lastActivity = Date.now();
+	const MAX_RECONNECT_ATTEMPTS = 10;
+	const INITIAL_RECONNECT_MS = 1000;
+	const MAX_RECONNECT_MS = 30000;
+	const IDLE_PROBE_MS = 30000;
+	let idleProbeTimer: ReturnType<typeof setInterval> | undefined;
 	// Side-channel listeners for session events the chat itself does not
 	// render (todos-updated, …) — lets pages drop their own polling loops.
 	const sessionEventListeners = new Set<
@@ -366,9 +375,18 @@ export function createMessages(sessionId: () => string) {
 	}
 
 	function connectSSE(sid: string): void {
+		// Single long-lived SSE per active session (IM-style). Cancel any prior
+		// stream + reconnect timers before opening the new one so a rapid
+		// session switch never leaves a duplicate connection behind.
+		if (reconnectTimer) clearTimeout(reconnectTimer);
+		reconnectTimer = undefined;
 		if (eventSource) eventSource.close();
 		eventSource = new EventSource(`/api/v1/sessions/${sid}/stream`);
+		reconnectAttempt = 0;
+		lastActivity = Date.now();
+		startIdleProbe();
 		eventSource.onmessage = (e) => {
+			lastActivity = Date.now();
 			try {
 				const ev = JSON.parse(e.data) as StreamEvent;
 				handleEvent(ev);
@@ -376,7 +394,41 @@ export function createMessages(sessionId: () => string) {
 				// ignore parse errors
 			}
 		};
-		// EventSource auto-reconnects on error; no manual handling needed
+		eventSource.onerror = () => {
+			// EventSource auto-reconnects; we additionally re-sync state so a
+			// half-open connection never leaves the UI stuck.
+			onStreamClosed(sid);
+		};
+	}
+
+	function onStreamClosed(sid: string): void {
+		if (sid !== sessionId()) return;
+		finishStreaming();
+		if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) return;
+		const delay = Math.min(
+			MAX_RECONNECT_MS,
+			INITIAL_RECONNECT_MS * Math.pow(2, reconnectAttempt),
+		);
+		reconnectAttempt++;
+		if (reconnectTimer) clearTimeout(reconnectTimer);
+		reconnectTimer = setTimeout(() => connectSSE(sid), delay);
+	}
+
+	function startIdleProbe(): void {
+		if (idleProbeTimer) clearInterval(idleProbeTimer);
+		idleProbeTimer = setInterval(() => {
+			if (Date.now() - lastActivity < IDLE_PROBE_MS) return;
+			api.sessions.state(sessionId()).then((r) => {
+				r.match(
+					(state) => {
+						if (state.status === "busy" || state.status === "running") {
+							sending = true;
+						}
+					},
+					() => {},
+				);
+			});
+		}, IDLE_PROBE_MS);
 	}
 
 	async function fetchMessages(before?: string): Promise<void> {
@@ -441,6 +493,8 @@ export function createMessages(sessionId: () => string) {
 		return () => {
 			mountId = 0;
 			if (deltaRafId != null) cancelAnimationFrame(deltaRafId);
+			if (reconnectTimer) clearTimeout(reconnectTimer);
+			if (idleProbeTimer) clearInterval(idleProbeTimer);
 			if (eventSource) {
 				eventSource.close();
 				eventSource = null;
@@ -510,7 +564,6 @@ export function createMessages(sessionId: () => string) {
 		await fetchMessages(anchorId);
 		return anchorId;
 	}
-
 	async function abort(): Promise<void> {
 		await api.sessions.interrupt(sessionId());
 		finishStreaming();
