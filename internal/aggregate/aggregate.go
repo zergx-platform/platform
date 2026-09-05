@@ -1085,7 +1085,11 @@ func (a *API) fsList(w http.ResponseWriter, r *http.Request) {
 	}
 	epath := "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/contents"
 	if prefix != "" {
-		epath += "/" + prefix
+		// jjlab's `/contents/{path}` treats `{path}` as a FILE unless it ends
+		// with '/'. Listing a directory must request the trailing-slash form so
+		// the handler takes the directory branch (e.g. `/contents/src/`), else
+		// it errors with `"src" is a directory` and the tree shows no folders.
+		epath += "/" + prefix + "/"
 	}
 	if err := a.Up.Repo.JSON(r.Context(), http.MethodGet, epath, nil, upstream.Q("ref", bookmark), &epr); err != nil {
 		badGateway(w, "jjlab", err)
